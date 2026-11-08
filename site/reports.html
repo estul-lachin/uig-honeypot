@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly reports · Honeypot · Estul Lachin</title>
+<meta name="description" content="Weekly threat reports from a Cowrie SSH/Telnet honeypot: what changed, what was new, and which MITRE ATT&amp;CK techniques the bots used. No IP addresses are published.">
+<meta property="og:title" content="Weekly honeypot reports · Estul Lachin">
+<meta property="og:description" content="Real SSH/Telnet attack traffic, summarized each week and mapped to MITRE ATT&amp;CK.">
+<meta property="og:url" content="https://honeypot.uig.me/reports.html">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script defer src="reports.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="https://lab.uig.me/">Estul Lachin</a>
+    <nav>
+      <a href="https://lab.uig.me/">Labs</a>
+      <a href="https://lab.uig.me/projects/">Projects</a>
+      <a href="https://lab.uig.me/timeline/">Timeline</a>
+      <a href="./" aria-current="page">Honeypot</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="subnav"><a href="./">Live map</a> · <span aria-current="page">Weekly reports</span></p>
+  <section class="intro">
+    <h1 id="title">Weekly reports</h1>
+    <p class="lead">One report per ISO week (Monday to Sunday, UTC), generated automatically when the week ends.
+      Each session's commands are mapped to MITRE ATT&amp;CK techniques with
+      <a href="https://github.com/estul-lachin/uig-honeypot/blob/main/vps/ttp_rules.json">a public rule file</a>.
+      No IP addresses are published.</p>
+  </section>
+
+  <div class="week-pick">
+    <label for="week">Week</label>
+    <select id="week" disabled><option>Loading…</option></select>
+    <span class="meta" id="range"></span>
+  </div>
+  <p class="meta" id="status" aria-live="polite"></p>
+
+  <div id="report" hidden>
+    <div class="stats" id="stats">
+      <div class="stat"><span class="num" data-k="sessions">–</span><span class="label">Sessions</span><span class="delta" data-k="sessions"></span></div>
+      <div class="stat"><span class="num" data-k="unique_sources">–</span><span class="label">Unique sources</span><span class="delta" data-k="unique_sources"></span></div>
+      <div class="stat"><span class="num" data-k="login_attempts">–</span><span class="label">Login attempts</span><span class="delta" data-k="login_attempts"></span></div>
+      <div class="stat"><span class="num" data-k="commands_run">–</span><span class="label">Commands run</span><span class="delta" data-k="commands_run"></span></div>
+    </div>
+
+    <section class="card notes" aria-labelledby="notes-h">
+      <h2 id="notes-h">Analyst notes</h2>
+      <div id="notes"></div>
+    </section>
+
+    <section aria-labelledby="ttp-h">
+      <h2 id="ttp-h">MITRE ATT&amp;CK techniques</h2>
+      <div class="card">
+        <p class="meta">Sessions in which each technique was seen. A session counts once per technique.</p>
+        <table id="t-ttps" class="ttps"></table>
+      </div>
+    </section>
+
+    <section aria-labelledby="hours-h">
+      <h2 id="hours-h">Sessions by hour (UTC)</h2>
+      <div class="card"><div class="hours" id="hours" role="img" aria-label="Sessions by hour of day, UTC"></div></div>
+    </section>
+
+    <h2>New this week</h2>
+    <p class="meta">Not seen on any earlier day.</p>
+    <div class="tables">
+      <section class="card"><h3>Passwords</h3><table id="t-new-passwords"></table></section>
+      <section class="card"><h3>Downloads attempted</h3>
+        <p class="meta">Nothing is actually fetched. Hashes link to VirusTotal.</p>
+        <table id="t-downloads" class="mono"></table></section>
+      <section class="card wide"><h3>Commands</h3><table id="t-new-commands" class="mono"></table></section>
+    </div>
+
+    <h2>Top of the week</h2>
+    <div class="tables">
+      <section class="card"><h3>Countries</h3><table id="t-countries"></table></section>
+      <section class="card"><h3>Username / password</h3><table id="t-pairs"></table></section>
+      <section class="card wide"><h3>Commands</h3><table id="t-commands" class="mono"></table></section>
+      <section class="card"><h3>Usernames</h3><table id="t-usernames"></table></section>
+      <section class="card"><h3>SSH clients</h3><table id="t-clients" class="mono"></table></section>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a href="https://www.linkedin.com/in/estul-lachin">LinkedIn</a> ·
+    <a href="https://github.com/estul-lachin">GitHub</a> ·
+    <a href="https://github.com/estul-lachin/uig-honeypot">Source</a>
+    <p class="credit"><a href="https://db-ip.com">IP Geolocation by DB-IP</a> (CC BY 4.0) ·
+      <a href="https://attack.mitre.org/">MITRE ATT&amp;CK®</a> · <span id="generated"></span></p>
+  </div>
+</footer>
+</body>
+</html>

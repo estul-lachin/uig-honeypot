@@ -1,0 +1,28 @@
+# Local Splunk for the honeypot's raw logs. Mac only, never on the VPS (2 GB).
+# Started by ./hp siem up, which sets SPLUNK_PASSWORD from HP_SPLUNK_PASSWORD
+# in .env.local. Splunk Web: http://127.0.0.1:8010 (admin / that password).
+name: uig-honeypot-siem
+
+services:
+  splunk:
+    # amd64 only; Apple Silicon runs it through Rosetta.
+    image: splunk/splunk:10.4.5
+    platform: linux/amd64
+    hostname: honeypot-siem
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD:?run through ./hp siem up}
+      TZ: UTC
+    ports:
+      # localhost only: the raw logs contain attacker IPs and are private
+      - "127.0.0.1:8010:8000"
+    volumes:
+      - ../logs:/opt/honeypot-logs:ro
+      # read-write so settings saved in the UI land in app/honeypot/local (git-ignored)
+      - ./app/honeypot:/opt/splunk/etc/apps/honeypot
+      - splunk-var:/opt/splunk/var
+    restart: "no"
+
+volumes:
+  splunk-var:

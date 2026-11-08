@@ -44,7 +44,7 @@
     $("generated").textContent = "Updated " + s.generated_at.replace("T", " ").replace("Z", " UTC");
   }
 
-  function fillTable(id, rows, render) {
+  function fillTable(id, rows, render, key = "count") {
     const table = $(id);
     table.replaceChildren();
     if (!rows.length) {
@@ -53,7 +53,7 @@
       td.textContent = "Nothing yet";
       return;
     }
-    const max = Math.max(...rows.map((r) => r.count));
+    const max = Math.max(...rows.map((r) => r[key]));
     for (const r of rows) {
       const tr = table.insertRow();
       const v = tr.insertCell();
@@ -61,11 +61,11 @@
       render(v, r);
       const n = tr.insertCell();
       n.className = "n";
-      n.textContent = fmt.format(r.count);
+      n.textContent = fmt.format(r[key]);
       const b = tr.insertCell();
       b.className = "b";
       const i = document.createElement("i");
-      i.style.width = (100 * r.count / max).toFixed(1) + "%";
+      i.style.width = (100 * r[key] / max).toFixed(1) + "%";
       b.appendChild(i);
     }
   }
@@ -76,6 +76,17 @@
     const countries = Object.entries(s.countries || {})
       .map(([cc, count]) => ({ cc, count })).slice(0, 20);
     fillTable("t-countries", countries, (td, r) => { td.textContent = countryLabel(r.cc); });
+    fillTable("t-ttps", s.ttps || [], (td, r) => {
+      const a = document.createElement("a");
+      a.href = "https://attack.mitre.org/techniques/" + r.id.replace(".", "/") + "/";
+      a.rel = "noopener";
+      a.textContent = r.id;
+      const t = document.createElement("span");
+      t.className = "tactic";
+      t.textContent = r.tactic;
+      td.append(a, " ", r.name, " ", t);
+      td.title = r.id + " " + r.name + " (" + r.tactic + ")";
+    }, "sessions");
     fillTable("t-usernames", s.top.usernames, textCell);
     fillTable("t-passwords", s.top.passwords, textCell);
     fillTable("t-pairs", s.top.pairs, textCell);

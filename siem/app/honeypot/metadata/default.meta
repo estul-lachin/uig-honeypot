@@ -1,0 +1,4 @@
+# Share everything with all apps, so the macro, lookups and sourcetype work from Search too.
+[]
+access = read : [ * ], write : [ admin ]
+export = system

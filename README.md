@@ -1,8 +1,10 @@
 # uig-honeypot
 
 A [Cowrie](https://github.com/cowrie/cowrie) SSH/Telnet honeypot on a small VPS, with a public page at
-**https://honeypot.uig.me** that replays the last hour of attacks on a world map. The raw logs stay on
-the VPS. Only aggregated stats with no IPs and no live links get published.
+**https://honeypot.uig.me** that replays the last hour of attacks on a world map, plus
+[weekly reports](https://honeypot.uig.me/reports.html) mapped to MITRE ATT&CK. The raw logs stay private
+(on the VPS, and in a local Splunk for detection work). Only aggregated stats with no IPs and no live
+links get published.
 
 ```
 VPS (Debian 13)
@@ -10,12 +12,14 @@ VPS (Debian 13)
 ├─ Docker: Cowrie on 22/23, read-only, no capabilities, no outbound connections
 └─ hourly systemd timer
      aggregate.py → stats.json + recent.json (GeoIP: country/city/coords, never IPs)
+                    ATT&CK tags from ttp_rules.json; weekly.py → reports/YYYY-Www.json per finished week
      publish.sh   → force-push one commit to the uig-honeypot-data repo (deploy key, that repo only)
 GitHub
-├─ uig-honeypot-data: the two JSON files, replaced hourly
-└─ uig-honeypot Pages: site/ (static; reads the JSON from the data repo)
+├─ uig-honeypot-data: the JSON files, replaced hourly
+└─ uig-honeypot Pages: site/ (static; reads the JSON from the data repo; notes/ holds weekly notes)
 Mac
-└─ ./hp: setup, deploy, status, fetch (local preview)
+├─ ./hp: setup, deploy, status, fetch (local preview), pull (raw logs → logs/, private)
+└─ siem/: local Splunk with the honeypot app: ATT&CK macro, 6 detections, overview dashboard
 ```
 
 ## Setup
@@ -48,6 +52,30 @@ from its source to the honeypot. Quiet stretches longer than 3 s are skipped, an
 
 Attacker-supplied strings are only ever inserted with `textContent`, never as HTML.
 
+## Weekly reports and ATT&CK mapping
+
+`vps/ttp_rules.json` maps Cowrie events and command text to MITRE ATT&CK techniques (regexes that
+Python and Splunk both understand). `aggregate.py` counts each technique once per session, and
+`weekly.py` writes one report per finished ISO week (UTC) two hours after it ends: totals with the change
+from the previous week, values never seen before, TTPs, the hours of day, and the top lists. Reports are written once
+and outlive the 30-day raw-log retention. Notes for a week go in `site/notes/YYYY-Www.md`
+(see `site/notes/README.md`).
+
+## Local SIEM (Splunk)
+
+```
+./hp pull          # raw cowrie.json* → logs/ (git-ignored; contains attacker IPs)
+./hp siem up       # http://127.0.0.1:8010, admin / HP_SPLUNK_PASSWORD from .env.local
+./hp siem reload   # after editing ttp_rules.json or the app
+./hp siem down     # stop; ./hp siem reset also deletes the index
+```
+
+`siem/app/honeypot` defines the `honeypot` index, the `cowrie:json` sourcetype, the `cowrie_ttp`
+macro and `ttp_rules` lookup (both generated from `vps/ttp_rules.json` by `siem/gen_splunk.py`),
+six scheduled detections and the *Honeypot overview* dashboard. The detections are described, with SPL
+and false positives, in [docs/detections.md](docs/detections.md). Splunk runs as a 60-day Enterprise
+trial; after that the Free license still searches but doesn't run scheduled alerts.
+
 ## Safety
 
 - **No outbound connections from the honeypot.** `uig-egress.sh` drops every NEW connection that
@@ -68,5 +96,6 @@ Attacker-supplied strings are only ever inserted with `textContent`, never as HT
 
 ```
 python3 -m unittest discover -s tests
+python3 siem/gen_splunk.py --check   # Splunk macro and lookup match ttp_rules.json
 shellcheck hp vps/*.sh
 ```

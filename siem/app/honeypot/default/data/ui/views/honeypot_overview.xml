@@ -1,0 +1,130 @@
+<form version="1.1" theme="light">
+  <label>Honeypot overview</label>
+  <description>Cowrie SSH/Telnet honeypot. Raw logs from ./hp pull; times in UTC. Detections: Detections menu and docs/detections.md.</description>
+  <fieldset submitButton="false">
+    <input type="time" token="t">
+      <label>Time range</label>
+      <default><earliest>-7d@d</earliest><latest>now</latest></default>
+    </input>
+  </fieldset>
+  <search id="base">
+    <query>index=honeypot sourcetype=cowrie:json | fields _time eventid session src_ip username password input protocol url</query>
+    <earliest>$t.earliest$</earliest>
+    <latest>$t.latest$</latest>
+  </search>
+
+  <row>
+    <panel><single>
+      <title>Sessions</title>
+      <search base="base"><query>search eventid="cowrie.session.connect" | stats count</query></search>
+    </single></panel>
+    <panel><single>
+      <title>Unique sources</title>
+      <search base="base"><query>search eventid="cowrie.session.connect" | stats dc(src_ip)</query></search>
+    </single></panel>
+    <panel><single>
+      <title>Login attempts</title>
+      <search base="base"><query>search eventid IN ("cowrie.login.failed", "cowrie.login.success") | stats count</query></search>
+    </single></panel>
+    <panel><single>
+      <title>Commands run</title>
+      <search base="base"><query>search eventid="cowrie.command.input" | stats count</query></search>
+    </single></panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Sessions per hour by protocol</title>
+      <chart>
+        <search base="base"><query>search eventid="cowrie.session.connect" | timechart span=1h count by protocol</query></search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">sessions</option>
+        <option name="charting.fieldColors">{"ssh": 0x2A78D6, "telnet": 0xEB6834}</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>ATT&amp;CK techniques per day (sessions)</title>
+      <table>
+        <search>
+          <query>index=honeypot sourcetype=cowrie:json eventid IN ("cowrie.login.failed", "cowrie.login.success", "cowrie.command.input", "cowrie.session.file_download", "cowrie.session.file_download.failed")
+| `cowrie_ttp` | where isnotnull(ttp) | mvexpand ttp
+| bin _time span=1d | stats dc(session) AS sessions by ttp _time
+| eval day=strftime(_time, "%m-%d") | xyseries ttp day sessions
+| lookup ttp_rules id AS ttp OUTPUT name tactic | fillnull value=0
+| table ttp name tactic *</query>
+          <earliest>$t.earliest$</earliest>
+          <latest>$t.latest$</latest>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">none</option>
+        <format type="color">
+          <colorPalette type="minMidMax" minColor="#FFFFFF" maxColor="#2A78D6"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Sources by location</title>
+      <map>
+        <search base="base"><query>search eventid="cowrie.session.connect" | iplocation src_ip | geostats count</query></search>
+        <option name="mapping.type">marker</option>
+        <option name="mapping.map.center">(20,40)</option>
+        <option name="mapping.map.zoom">1</option>
+        <option name="drilldown">none</option>
+      </map>
+    </panel>
+    <panel>
+      <title>Top countries</title>
+      <table>
+        <search base="base"><query>search eventid="cowrie.session.connect" | iplocation src_ip | stats count AS sessions dc(src_ip) AS sources by Country | sort - sessions | head 15</query></search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Top credentials</title>
+      <table>
+        <search base="base"><query>search eventid IN ("cowrie.login.failed", "cowrie.login.success") | stats count dc(src_ip) AS sources by username password | sort - count | head 15</query></search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Top commands</title>
+      <table>
+        <search base="base"><query>search eventid="cowrie.command.input" | stats count dc(src_ip) AS sources by input | sort - count | head 15</query></search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Detections fired</title>
+      <table>
+        <search>
+          <query>index=_audit action=alert_fired ss_app=honeypot | stats count AS fired latest(_time) AS last by ss_name | eval last=strftime(last, "%F %T") | rename ss_name AS detection | sort detection</query>
+          <earliest>$t.earliest$</earliest>
+          <latest>$t.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Longest sessions</title>
+      <table>
+        <search base="base"><query>search eventid IN ("cowrie.command.input") | stats count AS commands earliest(_time) AS start values(input) AS sample by session src_ip | sort - commands | head 10 | eval start=strftime(start, "%F %T"), sample=mvindex(sample, 0, 4)</query></search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

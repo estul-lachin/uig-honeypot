@@ -1,0 +1,9 @@
+<nav search_view="search" color="#2a78d6">
+  <view name="honeypot_overview" default="true" />
+  <view name="search" />
+  <collection label="Detections">
+    <saved source="unclassified" match="HP-" />
+  </collection>
+  <view name="alerts" />
+  <view name="reports" />
+</nav>

@@ -25,12 +25,18 @@ mkdir -p "$WORK"
 cd "$WORK"
 git init -q -b main
 cp "$APP/data/stats.json" "$APP/data/recent.json" .
+# Weekly reports (see weekly.py): small, written once per finished week.
+if [ -d "$APP/data/reports" ]; then
+    mkdir reports
+    cp "$APP"/data/reports/*.json reports/
+fi
 cat >README.md <<'EOF'
 # uig-honeypot-data
 
 Aggregated, privacy-safe output of the honeypot described in
 https://github.com/estul-lachin/uig-honeypot, read by https://honeypot.uig.me.
 Replaced every hour by a single force-pushed commit. No IP addresses.
+reports/ holds one file per finished ISO week (UTC) and an index.json.
 IP geolocation by DB-IP (https://db-ip.com), CC BY 4.0.
 EOF
 git add -A

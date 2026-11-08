@@ -8,7 +8,7 @@ EnvironmentFile=-/opt/uig-honeypot/.env
 WorkingDirectory=/opt/uig-honeypot
 ExecStart=/usr/bin/python3 /opt/uig-honeypot/aggregate.py \
   --logs data/var/log/cowrie --state data/state \
-  --out data/stats.json --recent-out data/recent.json \
+  --out data/stats.json --recent-out data/recent.json --reports data/reports \
   --geoip data/geoip/dbip-city-lite.mmdb \
   "--redact=${HP_PUBLIC_IP}"
 # Raw logs, TTY recordings and downloads are kept for 30 days only; the

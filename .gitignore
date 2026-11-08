@@ -4,3 +4,6 @@ __pycache__/
 .cache/
 .DS_Store
 site/data/
+logs/
+siem/app/honeypot/local/
+siem/app/honeypot/lookups/honeypot_seen_urls.csv

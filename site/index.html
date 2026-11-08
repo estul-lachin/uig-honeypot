@@ -29,6 +29,7 @@
 </header>
 
 <main class="wrap">
+  <p class="subnav"><span aria-current="page">Live map</span> · <a href="reports.html">Weekly reports</a></p>
   <section class="intro">
     <h1>Honeypot</h1>
     <p class="lead">A <a href="https://github.com/cowrie/cowrie">Cowrie</a> SSH and Telnet honeypot on a small VPS in
@@ -86,6 +87,9 @@
 
   <h2>What they try</h2>
   <div class="tables">
+    <section class="card wide"><h3>MITRE ATT&amp;CK techniques</h3>
+      <p class="meta">Sessions in which each technique was seen, from <a href="https://github.com/estul-lachin/uig-honeypot/blob/main/vps/ttp_rules.json">these rules</a>. Details per week in the <a href="reports.html">weekly reports</a>.</p>
+      <table id="t-ttps" class="ttps"></table></section>
     <section class="card"><h3>Countries</h3><table id="t-countries"></table></section>
     <section class="card"><h3>Usernames</h3><table id="t-usernames"></table></section>
     <section class="card"><h3>Passwords</h3><table id="t-passwords"></table></section>

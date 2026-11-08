@@ -14,6 +14,9 @@ once into a small partial file under --state. The live cowrie.json is
 parsed on every run and never cached. Partials outlive the raw logs, so
 history survives log cleanup. Each counter in a partial keeps only its
 top KEEP entries, so long-tail counts are approximate.
+
+Sessions are also tagged with MITRE ATT&CK techniques from ttp_rules.json
+(next to this script); each technique counts once per session.
 """
 
 import argparse
@@ -28,7 +31,12 @@ import sys
 KEEP = 500          # entries kept per counter in a partial
 TOP = 20            # entries published per top list
 MAX_LEN = 120       # longest string published
-COUNTERS = ("usernames", "passwords", "pairs", "commands", "clients", "downloads", "countries")
+COUNTERS = ("usernames", "passwords", "pairs", "commands", "clients", "downloads", "countries",
+            "ttps", "hours")
+# Bump when the partial format changes: old partials are then ignored and
+# rebuilt from the raw logs that are still on disk.
+PARTIAL_SUFFIX = ".v2.partial.json"
+RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ttp_rules.json")
 RECENT_WINDOW = 3600  # seconds of events in recent.json
 RECENT_MAX = 2000     # cap on events in recent.json (newest kept)
 GEO_DIGITS = 1        # coordinate rounding: 0.1 degree is about 11 km
@@ -50,6 +58,32 @@ def clean(value, redact):
     s = IPV4.sub(r"\1[.]\2[.]\3[.]\4", s)
     s = " ".join(s.split())
     return s if len(s) <= MAX_LEN else s[: MAX_LEN - 1] + "…"
+
+
+def load_rules(path=RULES_FILE):
+    """Return (event rules {eventid: [id]}, [(compiled pattern, id)], {id: meta})."""
+    with open(path, encoding="utf-8") as fh:
+        rules = json.load(fh)["rules"]
+    by_event, patterns, meta = collections.defaultdict(list), [], {}
+    for r in rules:
+        meta.setdefault(r["id"], {"id": r["id"], "name": r["name"], "tactic": r["tactic"]})
+        if "event" in r:
+            by_event[r["event"]].append(r["id"])
+        else:
+            patterns.append((re.compile(r["pattern"]), r["id"]))
+    return dict(by_event), patterns, meta
+
+
+RULES = load_rules()
+
+
+def tag(eid, text=None, rules=RULES):
+    """ATT&CK technique IDs for one event (a set, possibly empty)."""
+    by_event, patterns, _ = rules
+    ids = set(by_event.get(eid, ()))
+    if text:
+        ids.update(tid for rx, tid in patterns if rx.search(text))
+    return ids
 
 
 def new_day():
@@ -110,6 +144,7 @@ def parse(path, redact, exclude, geo=NO_GEO, since=None, recent=None):
     `since` are also appended to `recent` in their public form.
     """
     days = collections.defaultdict(new_day)
+    tagged = set()  # (day, session, technique): count each once per session
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
@@ -122,12 +157,19 @@ def parse(path, redact, exclude, geo=NO_GEO, since=None, recent=None):
                 continue
             b = days[day]
             item = None
+            text = ev.get("input") if eid == "cowrie.command.input" else None
+            for tid in tag(eid, str(text) if text is not None else None):
+                key = (day, ev.get("session"), tid)
+                if key not in tagged:
+                    tagged.add(key)
+                    b["ttps"][tid] += 1
             if eid == "cowrie.session.connect":
                 b["sessions"] += 1
                 b["ips"].add(ev.get("src_ip", ""))
                 proto = ev.get("protocol", "ssh")
                 if proto in ("ssh", "telnet"):
                     b[proto] += 1
+                b["hours"][ev["timestamp"][11:13]] += 1
                 cc = geo(ev.get("src_ip")).get("cc")
                 b["countries"][cc or "??"] += 1
                 item = {"kind": "connect", "proto": proto if proto in ("ssh", "telnet") else "ssh"}
@@ -250,7 +292,15 @@ def build(all_days, now):
         "downloads": downloads,
         # every country seen ("??" = no geo data), for the map's shading
         "countries": dict(total["countries"].most_common()),
+        "ttps": ttp_list(total["ttps"]),
     }
+
+
+def ttp_list(counter):
+    """Every technique seen, most sessions first, with its name and tactic."""
+    meta = RULES[2]
+    return [{**meta.get(k, {"id": k, "name": k, "tactic": ""}), "sessions": v}
+            for k, v in counter.most_common()]
 
 
 def main(argv=None):
@@ -264,6 +314,7 @@ def main(argv=None):
                     help="source IP whose events are ignored (repeatable)")
     ap.add_argument("--geoip", help="DB-IP Lite City .mmdb (optional)")
     ap.add_argument("--recent-out", help="recent.json to write (optional)")
+    ap.add_argument("--reports", help="directory for weekly reports (optional, see weekly.py)")
     a = ap.parse_args(argv)
     return run(a, Geo(a.geoip), datetime.datetime.now(datetime.timezone.utc))
 
@@ -279,10 +330,10 @@ def run(a, geo, now):
     rotated = [p for p in sorted(glob.glob(os.path.join(a.logs, "cowrie.json.*")))
                if not p.endswith(".tmp")]
     for path in rotated:
-        part = os.path.join(a.state, os.path.basename(path) + ".partial.json")
+        part = os.path.join(a.state, os.path.basename(path) + PARTIAL_SUFFIX)
         if not os.path.exists(part):
             atomic_write(part, to_json(parse(path, redact, exclude, geo)))
-    for part in sorted(glob.glob(os.path.join(a.state, "*.partial.json"))):
+    for part in sorted(glob.glob(os.path.join(a.state, "*" + PARTIAL_SUFFIX))):
         with open(part, encoding="utf-8") as fh:
             merge(all_days, from_json(json.load(fh)))
     # Just after midnight the last hour is split across the newest rotated
@@ -294,6 +345,9 @@ def run(a, geo, now):
         merge(all_days, parse(live, redact, exclude, geo, since, recent))
 
     atomic_write(a.out, build(all_days, now))
+    if getattr(a, "reports", None):
+        import weekly  # imports this module, so not at the top
+        weekly.write_reports(all_days, a.reports, now)
     if recent is not None:
         recent.sort(key=lambda e: e["t"])
         atomic_write(a.recent_out, {

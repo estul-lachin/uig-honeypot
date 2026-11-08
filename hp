@@ -77,6 +77,52 @@ cmd_fetch() {
     say "Saved site/data/ (local preview only; git-ignored)"
 }
 
+# Raw logs for the local Splunk (siem/). Private: logs/ is git-ignored and
+# holds attacker IPs. Rotated files never change, so only missing ones and the
+# live cowrie.json are copied. Downloads and TTY recordings stay on the VPS.
+cmd_pull() {
+    local dir=$ROOT/logs f n=0
+    mkdir -p "$dir"
+    chmod 700 "$dir"
+    while IFS= read -r f; do
+        case "$f" in
+            cowrie.json|cowrie.json.[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *) continue ;;
+        esac
+        [ "$f" != cowrie.json ] && [ -s "$dir/$f" ] && continue
+        # </dev/null: ssh would otherwise eat the file list this loop reads
+        remote "gzip -c $APP/data/var/log/cowrie/$f" </dev/null | gunzip >"$dir/$f.tmp"
+        mv "$dir/$f.tmp" "$dir/$f"
+        n=$((n + 1))
+    done < <(remote "ls -1 $APP/data/var/log/cowrie")
+    say "Copied $n file(s) to logs/ ($(du -sh "$dir" | cut -f1) in total)"
+}
+
+# Local Splunk with the honeypot app (siem/). Needs HP_SPLUNK_PASSWORD in .env.local.
+cmd_siem() {
+    local compose=(docker compose -f "$ROOT/siem/docker-compose.yml")
+    case "${1:-}" in
+        up)
+            : "${HP_SPLUNK_PASSWORD:?set HP_SPLUNK_PASSWORD in .env.local (8+ characters)}"
+            mkdir -p "$ROOT/logs"
+            python3 "$ROOT/siem/gen_splunk.py"
+            # first-seen state for HP-02; written by Splunk, never committed
+            local seen=$ROOT/siem/app/honeypot/lookups/honeypot_seen_urls.csv
+            [ -f "$seen" ] || echo "dl_url,first_seen,last_seen,count,sources,is_new" >"$seen"
+            SPLUNK_PASSWORD=$HP_SPLUNK_PASSWORD "${compose[@]}" up -d
+            say "Splunk starts in 2-3 minutes: http://127.0.0.1:8010 (admin / HP_SPLUNK_PASSWORD)"
+            ;;
+        reload)
+            python3 "$ROOT/siem/gen_splunk.py"
+            SPLUNK_PASSWORD=${HP_SPLUNK_PASSWORD:-x} "${compose[@]}" exec -u splunk splunk \
+                /opt/splunk/bin/splunk restart
+            ;;
+        down)  SPLUNK_PASSWORD=x "${compose[@]}" down ;;
+        reset) SPLUNK_PASSWORD=x "${compose[@]}" down -v ;;
+        *) die "usage: ./hp siem up | reload | down | reset (reset deletes the index)" ;;
+    esac
+}
+
 cmd_logs() { remote "tail -n 50 -F $APP/data/var/log/cowrie/cowrie.json"; }
 cmd_ssh()  { ssh "${SSH_OPTS[@]}" -p "$HP_SSH_PORT" "$HP_USER@$HP_HOST"; }
 
@@ -95,12 +141,20 @@ Day to day:
   status       containers, timer, current totals
   logs         follow the raw Cowrie log (private: never paste it anywhere public)
   fetch        download stats.json and recent.json into site/data/ for a local preview
+  pull         copy the raw Cowrie logs into logs/ (private, git-ignored) for the local Splunk
+
+Local Splunk (siem/, needs HP_SPLUNK_PASSWORD in .env.local):
+  siem up      start Splunk on http://127.0.0.1:8010 with the honeypot app
+  siem reload  regenerate the ATT&CK macro and restart Splunk after app changes
+  siem down    stop it (the index is kept)
+  siem reset   stop it and delete the index
   ssh          shell on the VPS
 EOF
 }
 
 case "${1:-help}" in
-    prepare|finalize|deploy|status|fetch|logs|ssh|help) "cmd_${1}" ;;
+    prepare|finalize|deploy|status|fetch|pull|logs|ssh|help) "cmd_${1}" ;;
+    siem) cmd_siem "${2:-}" ;;
     build-image) cmd_build_image ;;
     publish-setup) cmd_publish_setup ;;
     *) cmd_help; exit 1 ;;
