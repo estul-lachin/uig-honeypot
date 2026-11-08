@@ -11,11 +11,12 @@ T1003.008,OS Credential Dumping: /etc/passwd and /etc/shadow,Credential Access
 T1105,Ingress Tool Transfer,Command and Control
 T1059.004,Command and Scripting Interpreter: Unix Shell,Execution
 T1059.008,Command and Scripting Interpreter: Network Device CLI,Execution
-T1027,Obfuscated Files or Information,Defense Evasion
-T1222.002,File and Directory Permissions Modification: Linux,Defense Evasion
-T1070.003,Indicator Removal: Clear Command History,Defense Evasion
-T1070.004,Indicator Removal: File Deletion,Defense Evasion
-T1562.001,Impair Defenses: Disable or Modify Tools,Defense Evasion
+T1027,Obfuscated Files or Information,Stealth
+T1222.002,File and Directory Permissions Modification: Linux and Mac Permissions,Defense Impairment
+T1070.003,Indicator Removal: Clear Command History,Stealth
+T1070.004,Indicator Removal: File Deletion,Stealth
+T1686,Disable or Modify System Firewall,Defense Impairment
+T1685,Disable or Modify Tools,Defense Impairment
 T1053.003,Scheduled Task/Job: Cron,Persistence
 T1098.004,Account Manipulation: SSH Authorized Keys,Persistence
 T1098,Account Manipulation,Persistence

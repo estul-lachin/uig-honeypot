@@ -180,7 +180,8 @@ class TagTest(unittest.TestCase):
         "(crontab -l; echo '* * * * * /tmp/x') | crontab -": {"T1053.003"},
         "echo root:pass|chpasswd": {"T1098"},
         "rm -rf /tmp/*; history -c": {"T1070.004", "T1070.003"},
-        "systemctl stop firewalld; ufw disable": {"T1562.001"},
+        "systemctl stop firewalld; ufw disable": {"T1686"},
+        "setenforce 0; service aegis stop": {"T1685"},
         "./XMRig --url stratum+tcp://pool": {"T1496"},
         "echo /dev/tcp/1/2": {"T1105"},
         # Mirai-style IoT bots
