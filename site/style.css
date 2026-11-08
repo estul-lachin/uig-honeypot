@@ -195,6 +195,9 @@ table.ttps td.b { width: 22%; }
 .hours i { display: block; background: var(--bar); border-radius: 3px 3px 0 0; min-height: 1px; }
 .hours span { color: var(--muted); font-size: 11px; text-align: center; height: 16px; font-variant-numeric: tabular-nums; }
 
+.tables.inner { gap: 24px; margin-top: 8px; }
+h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+
 @media (max-width: 640px) {
   .tables { grid-template-columns: minmax(0, 1fr); }
   .hours { gap: 1px; }

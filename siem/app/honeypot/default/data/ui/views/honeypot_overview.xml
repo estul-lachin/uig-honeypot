@@ -92,6 +92,26 @@
 
   <row>
     <panel>
+      <title>AbuseIPDB confidence of sources</title>
+      <chart>
+        <search base="base"><query>search eventid="cowrie.session.connect" | lookup ip_reputation ip AS src_ip OUTPUT abuse_score | stats dc(src_ip) AS sources by abuse_score | eval range=case(isnull(abuse_score) OR abuse_score=="", "not checked", abuse_score==0, "0", abuse_score&lt;25, "1-24", abuse_score&lt;75, "25-74", true(), "75-100") | stats sum(sources) AS sources by range | eval o=case(range=="0",1,range=="1-24",2,range=="25-74",3,range=="75-100",4,true(),5) | sort o | fields - o</query></search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.seriesColors">[0x2A78D6]</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Sources by network type and ISP</title>
+      <table>
+        <search base="base"><query>search eventid="cowrie.session.connect" | lookup ip_reputation ip AS src_ip OUTPUT abuse_usage_type abuse_isp abuse_reports | stats dc(src_ip) AS sources count AS sessions sum(eval(if(abuse_reports==0,1,0))) AS unreported_sessions by abuse_usage_type abuse_isp | sort - sources | head 15 | rename abuse_usage_type AS "usage type", abuse_isp AS ISP</query></search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
       <title>Top credentials</title>
       <table>
         <search base="base"><query>search eventid IN ("cowrie.login.failed", "cowrie.login.success") | stats count dc(src_ip) AS sources by username password | sort - count | head 15</query></search>

@@ -58,7 +58,7 @@ def new_values(this, before):
     return [{"value": k, "count": v} for k, v in this.most_common() if k not in before][:NEW_TOP]
 
 
-def build_week(all_days, week):
+def build_week(all_days, week, rep=None):
     monday, end = week_bounds(week)
     in_week = sorted(d for d in all_days if monday.isoformat() <= d < end.isoformat())
     earlier = [all_days[d] for d in all_days if d < monday.isoformat()]
@@ -92,10 +92,11 @@ def build_week(all_days, week):
         "downloads": downloads,
         "ttps": aggregate.ttp_list(t["ttps"]),
         "countries": [{"cc": k, "sessions": v} for k, v in t["countries"].most_common(aggregate.TOP)],
+        "reputation": aggregate.reputation(t["ips"], rep or {}),
     }
 
 
-def write_reports(all_days, out_dir, now):
+def write_reports(all_days, out_dir, now, rep=None):
     """Write every finished week that has data and no file yet; refresh index.json."""
     os.makedirs(out_dir, exist_ok=True)
     weeks = sorted({iso_week(d) for d in all_days if all_days[d]["sessions"]})
@@ -104,9 +105,9 @@ def write_reports(all_days, out_dir, now):
         _, end = week_bounds(week)
         over = datetime.datetime.combine(end, datetime.time(), datetime.timezone.utc).timestamp() + GRACE
         if now.timestamp() >= over and not os.path.exists(path):
-            rep = build_week(all_days, week)
-            rep["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-            aggregate.atomic_write(path, rep)
+            report = build_week(all_days, week, rep)
+            report["generated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            aggregate.atomic_write(path, report)
     done = sorted((f[:-5] for f in os.listdir(out_dir)
                    if f.endswith(".json") and f != "index.json" and not f.endswith(".tmp")), reverse=True)
     aggregate.atomic_write(os.path.join(out_dir, "index.json"),

@@ -11,6 +11,7 @@ VPS (Debian 13)
 ├─ real sshd on a high port, key-only
 ├─ Docker: Cowrie on 22/23, read-only, no capabilities, no outbound connections
 └─ hourly systemd timer
+     enrich.py    → AbuseIPDB lookups of new source IPs (check only, never reports; cache stays private)
      aggregate.py → stats.json + recent.json (GeoIP: country/city/coords, never IPs)
                     ATT&CK tags from ttp_rules.json; weekly.py → reports/YYYY-Www.json per finished week
      publish.sh   → force-push one commit to the uig-honeypot-data repo (deploy key, that repo only)
@@ -19,7 +20,7 @@ GitHub
 └─ uig-honeypot Pages: site/ (static; reads the JSON from the data repo; notes/ holds weekly notes)
 Mac
 ├─ ./hp: setup, deploy, status, fetch (local preview), pull (raw logs → logs/, private)
-└─ siem/: local Splunk with the honeypot app: ATT&CK macro, 6 detections, overview dashboard
+└─ siem/: local Splunk with the honeypot app: ATT&CK macro, IP reputation lookup, 7 detections, dashboard
 ```
 
 ## Setup
@@ -61,6 +62,20 @@ from the previous week, values never seen before, TTPs, the hours of day, and th
 and outlive the 30-day raw-log retention. Notes for a week go in `site/notes/YYYY-Www.md`
 (see `site/notes/README.md`).
 
+## IP reputation (AbuseIPDB)
+
+`vps/enrich.py` runs before each hourly aggregation and looks up source IPs from the last three days in
+[AbuseIPDB](https://www.abuseipdb.com/) (`/check` only: this honeypot never reports IPs). Each IP is looked
+up once and again only if it returns after 7 days; at most 900 lookups a day, inside the free plan's 1000.
+Results are cached in `data/enrich/abuseipdb.json` on the VPS (private). The public pages get only a
+summary with no IPs: score ranges, how many sources had never been reported, network types and ISPs.
+`./hp pull` copies the cache to the Mac as the Splunk lookup `ip_reputation`, which adds `abuse_score`,
+`abuse_reports`, `abuse_isp` and more to every event automatically.
+
+Setup: create a free AbuseIPDB account and API key, put `HP_ABUSEIPDB_KEY=...` in `.env.local`, then
+`./hp deploy`. The key is written to `/opt/uig-honeypot/.env` (mode 600) and read from the environment,
+never from the command line. Without a key the step is skipped.
+
 ## Local SIEM (Splunk)
 
 ```
@@ -72,7 +87,7 @@ and outlive the 30-day raw-log retention. Notes for a week go in `site/notes/YYY
 
 `siem/app/honeypot` defines the `honeypot` index, the `cowrie:json` sourcetype, the `cowrie_ttp`
 macro and `ttp_rules` lookup (both generated from `vps/ttp_rules.json` by `siem/gen_splunk.py`),
-six scheduled detections and the *Honeypot overview* dashboard. The detections are described, with SPL
+seven scheduled detections and the *Honeypot overview* dashboard. The detections are described, with SPL
 and false positives, in [docs/detections.md](docs/detections.md). Splunk runs as a 60-day Enterprise
 trial; after that the Free license still searches but doesn't run scheduled alerts.
 

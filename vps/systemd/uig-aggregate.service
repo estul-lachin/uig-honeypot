@@ -6,10 +6,13 @@ Type=oneshot
 UMask=0022
 EnvironmentFile=-/opt/uig-honeypot/.env
 WorkingDirectory=/opt/uig-honeypot
+# AbuseIPDB lookups (check only). Best effort: no key or no network must not stop the stats.
+ExecStartPre=-/usr/bin/python3 /opt/uig-honeypot/enrich.py \
+  --logs data/var/log/cowrie --cache data/enrich/abuseipdb.json "--exclude-ip=${HP_PUBLIC_IP}"
 ExecStart=/usr/bin/python3 /opt/uig-honeypot/aggregate.py \
   --logs data/var/log/cowrie --state data/state \
   --out data/stats.json --recent-out data/recent.json --reports data/reports \
-  --geoip data/geoip/dbip-city-lite.mmdb \
+  --geoip data/geoip/dbip-city-lite.mmdb --reputation data/enrich/abuseipdb.json \
   "--redact=${HP_PUBLIC_IP}"
 # Raw logs, TTY recordings and downloads are kept for 30 days only; the
 # partials in data/state keep the history.

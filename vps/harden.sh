@@ -107,7 +107,7 @@ install() {
     say "Preparing data directories (Cowrie runs as uid 999)"
     mkdir -p data/state data/geoip data/var/log/cowrie data/var/lib/cowrie/tty data/var/lib/cowrie/downloads
     chown -R 999:999 data/var
-    chmod 755 uig-egress.sh aggregate.py geoip-update.sh publish.sh
+    chmod 755 uig-egress.sh aggregate.py enrich.py geoip-update.sh publish.sh
     dpkg -s python3-maxminddb git >/dev/null 2>&1 \
         || DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends python3-maxminddb git
 

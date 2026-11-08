@@ -1,6 +1,6 @@
 # Detections
 
-Six scheduled searches in the local Splunk (`siem/app/honeypot/default/savedsearches.conf`), run on the
+Seven scheduled searches in the local Splunk (`siem/app/honeypot/default/savedsearches.conf`), run on the
 honeypot's raw Cowrie logs. Everything on a honeypot is malicious by definition, so these don't separate
 good from bad. They pick out the sessions worth an analyst's time from thousands of identical scans.
 
@@ -116,7 +116,26 @@ index=honeypot sourcetype=cowrie:json eventid="cowrie.session.connect"
 | where _time-previous > 7*86400
 ```
 
-HP-03 to HP-06 were checked against synthetic events in a separate test index, because the honeypot hadn't
+## HP-07 Unknown source got a shell
+
+**Enrichment:** AbuseIPDB (`ip_reputation` lookup). **Throttle:** source IP.
+
+A source that **nobody has reported to AbuseIPDB yet** logged in and ran commands. Most of the honeypot's
+sources are long-known scanners. One with zero reports that still gets a shell is fresh infrastructure, which
+is the indicator a honeypot is uniquely placed to find before it shows up on blocklists.
+
+```spl
+index=honeypot sourcetype=cowrie:json eventid IN ("cowrie.login.success", "cowrie.command.input")
+| stats count(eval(eventid=="cowrie.command.input")) AS commands values(session) AS sessions
+    min(_time) AS first_seen by src_ip abuse_reports abuse_score abuse_isp abuse_usage_type
+| where abuse_reports=0 AND commands>0
+```
+
+`abuse_*` fields come from an automatic lookup in `props.conf`, so they're on every event without an explicit
+`| lookup`. IPs not looked up yet have no `abuse_reports` and drop out of the `stats ... by`, so they never
+match by accident.
+
+HP-03 to HP-07 were checked against synthetic events in a separate test index, because the honeypot hadn't
 produced matching traffic yet. Each returned the expected row.
 
 ## What the tagging found first

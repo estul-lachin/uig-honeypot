@@ -95,6 +95,12 @@
     <section class="card wide"><h3>MITRE ATT&amp;CK techniques</h3>
       <p class="meta">Sessions in which each technique was seen, from <a href="https://github.com/estul-lachin/uig-honeypot/blob/main/vps/ttp_rules.json">these rules</a>. Details per week in the <a href="reports.html">weekly reports</a>.</p>
       <table id="t-ttps" class="ttps"></table></section>
+    <section class="card wide" id="rep-card" hidden><h3>Are they known attackers?</h3>
+      <p class="meta" id="rep-summary"></p>
+      <div class="tables inner">
+        <div><h4>AbuseIPDB confidence score</h4><table id="t-rep-scores"></table></div>
+        <div><h4>Network type</h4><table id="t-rep-usage"></table></div>
+      </div></section>
     <section class="card"><h3>Countries</h3><table id="t-countries"></table></section>
     <section class="card"><h3>Usernames</h3><table id="t-usernames"></table></section>
     <section class="card"><h3>Passwords</h3><table id="t-passwords"></table></section>

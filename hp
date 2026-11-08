@@ -38,6 +38,7 @@ cmd_deploy() {
         echo "HP_PUBLIC_IP=${HP_PUBLIC_IP:-}"
         echo "HP_FAKE_HOSTNAME=${HP_FAKE_HOSTNAME:-db-backup-01}"
         [ -z "${HP_DATA_REPO:-}" ] || echo "HP_DATA_REPO=git@github.com:$HP_DATA_REPO.git"
+        [ -z "${HP_ABUSEIPDB_KEY:-}" ] || echo "HP_ABUSEIPDB_KEY=$HP_ABUSEIPDB_KEY"
     } | remote "umask 077; cat >$APP/.env"
     remote bash -s install <"$ROOT/vps/harden.sh"
 }
@@ -96,6 +97,12 @@ cmd_pull() {
         n=$((n + 1))
     done < <(remote "ls -1 $APP/data/var/log/cowrie")
     say "Copied $n file(s) to logs/ ($(du -sh "$dir" | cut -f1) in total)"
+    # AbuseIPDB results from enrich.py, as a Splunk lookup (private: keyed by IP)
+    if remote "test -f $APP/data/enrich/abuseipdb.json" </dev/null; then
+        remote "cat $APP/data/enrich/abuseipdb.json" </dev/null >"$dir/abuseipdb.json.tmp"
+        mv "$dir/abuseipdb.json.tmp" "$dir/abuseipdb.json"
+        python3 "$ROOT/siem/gen_splunk.py" --reputation "$dir/abuseipdb.json"
+    fi
 }
 
 # Local Splunk with the honeypot app (siem/). Needs HP_SPLUNK_PASSWORD in .env.local.
@@ -109,6 +116,8 @@ cmd_siem() {
             # first-seen state for HP-02; written by Splunk, never committed
             local seen=$ROOT/siem/app/honeypot/lookups/honeypot_seen_urls.csv
             [ -f "$seen" ] || echo "dl_url,first_seen,last_seen,count,sources,is_new" >"$seen"
+            local rep=$ROOT/siem/app/honeypot/lookups/ip_reputation.csv
+            [ -f "$rep" ] || echo "ip,abuse_score,abuse_reports,abuse_reporters,abuse_last_reported,abuse_country,abuse_usage_type,abuse_isp,abuse_domain,abuse_is_tor,abuse_checked" >"$rep"
             SPLUNK_PASSWORD=$HP_SPLUNK_PASSWORD "${compose[@]}" up -d
             say "Splunk starts in 2-3 minutes: http://127.0.0.1:8010 (admin / HP_SPLUNK_PASSWORD)"
             ;;

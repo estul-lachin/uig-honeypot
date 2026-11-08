@@ -88,6 +88,7 @@
       td.title = r.id + " " + r.name + " (" + r.tactic + ")";
     }, "sessions");
     fillTable("t-usernames", s.top.usernames, textCell);
+    renderReputation(s.reputation, fillTable, (n) => fmt.format(n));
     fillTable("t-passwords", s.top.passwords, textCell);
     fillTable("t-pairs", s.top.pairs, textCell);
     fillTable("t-commands", s.top.commands, textCell);
@@ -100,6 +101,22 @@
       td.append(a, " ", r.url);
       td.title = r.url;
     });
+  }
+
+  // ---------- AbuseIPDB reputation (lookups only; no IPs in the data) ----------
+  function renderReputation(r, fill, fmtN) {
+    const card = document.getElementById("rep-card");
+    if (!r || !r.checked) { card.hidden = true; return; }
+    const pct = (n) => Math.round(100 * n / r.checked) + "%";
+    document.getElementById("rep-summary").textContent =
+      fmtN(r.checked) + " of " + fmtN(r.sources) + " sources looked up in AbuseIPDB. " +
+      pct(r.never_reported) + " had never been reported by anyone: new infrastructure, not yet on blocklists." +
+      (r.tor ? " " + fmtN(r.tor) + (r.tor === 1 ? " was a Tor exit node." : " were Tor exit nodes.") : "");
+    const labels = { "0": "0 (no reports)", "1-24": "1–24", "25-74": "25–74", "75-100": "75–100 (known bad)" };
+    fill("t-rep-scores", r.scores.map((b) => ({ value: labels[b.range] || b.range, count: b.sources })),
+      (td, x) => { td.textContent = x.value; });
+    fill("t-rep-usage", r.usage_types, (td, x) => { td.textContent = x.value; td.title = x.value; });
+    card.hidden = false;
   }
 
   // ---------- daily columns ----------

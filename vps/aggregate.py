@@ -251,7 +251,43 @@ def top(counter):
     return [{"value": k, "count": v} for k, v in counter.most_common(TOP)]
 
 
-def build(all_days, now):
+SCORE_BUCKETS = (("0", 0, 0), ("1-24", 1, 24), ("25-74", 25, 74), ("75-100", 75, 100))
+
+
+def load_reputation(path):
+    """{ip: AbuseIPDB record} from enrich.py's cache, or {} without one."""
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh).get("ips", {})
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def reputation(ips, rep):
+    """AbuseIPDB summary for a set of source IPs, with no IPs in it."""
+    recs = [rep[ip] for ip in ips if ip in rep]
+    if not recs:
+        return None
+    scores = [r.get("abuseConfidenceScore") or 0 for r in recs]
+    usage, isps = collections.Counter(), collections.Counter()
+    for r in recs:
+        usage[clean(r.get("usageType") or "Unknown", [])] += 1
+        isps[clean(r.get("isp") or "Unknown", [])] += 1
+    return {
+        "sources": len(ips),
+        "checked": len(recs),
+        "scores": [{"range": name, "sources": sum(lo <= x <= hi for x in scores)}
+                   for name, lo, hi in SCORE_BUCKETS],
+        "never_reported": sum(1 for r in recs if not r.get("totalReports")),
+        "tor": sum(1 for r in recs if r.get("isTor")),
+        "usage_types": [{"value": k, "count": v} for k, v in usage.most_common(8)],
+        "isps": [{"value": k, "count": v} for k, v in isps.most_common(10)],
+    }
+
+
+def build(all_days, now, rep=None):
     ips, total = set(), new_day()
     for b in all_days.values():
         ips |= b["ips"]
@@ -293,6 +329,8 @@ def build(all_days, now):
         # every country seen ("??" = no geo data), for the map's shading
         "countries": dict(total["countries"].most_common()),
         "ttps": ttp_list(total["ttps"]),
+        # AbuseIPDB lookups by enrich.py (null until there are any)
+        "reputation": reputation(ips, rep or {}),
     }
 
 
@@ -315,6 +353,7 @@ def main(argv=None):
     ap.add_argument("--geoip", help="DB-IP Lite City .mmdb (optional)")
     ap.add_argument("--recent-out", help="recent.json to write (optional)")
     ap.add_argument("--reports", help="directory for weekly reports (optional, see weekly.py)")
+    ap.add_argument("--reputation", help="enrich.py's AbuseIPDB cache (optional)")
     a = ap.parse_args(argv)
     return run(a, Geo(a.geoip), datetime.datetime.now(datetime.timezone.utc))
 
@@ -344,10 +383,11 @@ def run(a, geo, now):
     if os.path.exists(live):
         merge(all_days, parse(live, redact, exclude, geo, since, recent))
 
-    atomic_write(a.out, build(all_days, now))
+    rep = load_reputation(getattr(a, "reputation", None))
+    atomic_write(a.out, build(all_days, now, rep))
     if getattr(a, "reports", None):
         import weekly  # imports this module, so not at the top
-        weekly.write_reports(all_days, a.reports, now)
+        weekly.write_reports(all_days, a.reports, now, rep)
     if recent is not None:
         recent.sort(key=lambda e: e["t"])
         atomic_write(a.recent_out, {

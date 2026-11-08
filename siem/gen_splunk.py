@@ -6,6 +6,9 @@
 
 Run by `./hp siem up|reload`; the outputs are committed too, so the app also
 works without running this. Usage: gen_splunk.py [--check]
+
+With --reputation FILE (enrich.py's AbuseIPDB cache, copied by ./hp pull) it
+only writes lookups/ip_reputation.csv, which holds IPs and is never committed.
 """
 
 import csv
@@ -19,6 +22,11 @@ RULES = os.path.join(HERE, "..", "vps", "ttp_rules.json")
 APP = os.path.join(HERE, "app", "honeypot")
 MACROS = os.path.join(APP, "default", "macros.conf")
 LOOKUP = os.path.join(APP, "lookups", "ttp_rules.csv")
+REPUTATION = os.path.join(APP, "lookups", "ip_reputation.csv")
+REP_COLUMNS = (("ip", None), ("abuse_score", "abuseConfidenceScore"), ("abuse_reports", "totalReports"),
+               ("abuse_reporters", "numDistinctUsers"), ("abuse_last_reported", "lastReportedAt"),
+               ("abuse_country", "countryCode"), ("abuse_usage_type", "usageType"), ("abuse_isp", "isp"),
+               ("abuse_domain", "domain"), ("abuse_is_tor", "isTor"), ("abuse_checked", "checked"))
 
 
 def spl_string(s):
@@ -54,7 +62,25 @@ def render():
     return {MACROS: macros, LOOKUP: buf.getvalue()}
 
 
+def write_reputation(src):
+    with open(src, encoding="utf-8") as fh:
+        ips = json.load(fh).get("ips", {})
+    os.makedirs(os.path.dirname(REPUTATION), exist_ok=True)
+    tmp = REPUTATION + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh, lineterminator="\n")
+        w.writerow([c for c, _ in REP_COLUMNS])
+        for ip in sorted(ips):
+            r = ips[ip]
+            w.writerow([ip] + ["" if r.get(k) is None else r.get(k) for _, k in REP_COLUMNS[1:]])
+    os.replace(tmp, REPUTATION)
+    print(f"ip_reputation.csv: {len(ips)} IPs")
+
+
 def main(argv):
+    if "--reputation" in argv:
+        write_reputation(argv[argv.index("--reputation") + 1])
+        return 0
     out = render()
     if "--check" in argv:
         stale = [p for p, text in out.items()

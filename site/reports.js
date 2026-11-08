@@ -70,6 +70,22 @@
     td.title = r.url;
   }
 
+  // ---------- AbuseIPDB reputation (lookups only; no IPs in the data) ----------
+  function renderReputation(r, fill, fmtN) {
+    const card = document.getElementById("rep-card");
+    if (!r || !r.checked) { card.hidden = true; return; }
+    const pct = (n) => Math.round(100 * n / r.checked) + "%";
+    document.getElementById("rep-summary").textContent =
+      fmtN(r.checked) + " of " + fmtN(r.sources) + " sources looked up in AbuseIPDB. " +
+      pct(r.never_reported) + " had never been reported by anyone: new infrastructure, not yet on blocklists." +
+      (r.tor ? " " + fmtN(r.tor) + (r.tor === 1 ? " was a Tor exit node." : " were Tor exit nodes.") : "");
+    const labels = { "0": "0 (no reports)", "1-24": "1–24", "25-74": "25–74", "75-100": "75–100 (known bad)" };
+    fill("t-rep-scores", r.scores.map((b) => ({ value: labels[b.range] || b.range, count: b.sources })),
+      (td, x) => { td.textContent = x.value; });
+    fill("t-rep-usage", r.usage_types, (td, x) => { td.textContent = x.value; td.title = x.value; });
+    card.hidden = false;
+  }
+
   // ---------- KPIs ----------
   function renderStats(w) {
     for (const el of document.querySelectorAll("#stats .num")) el.textContent = fmt.format(w.totals[el.dataset.k] || 0);
@@ -176,6 +192,7 @@
       renderNotes(w.week);
       fillTable("t-ttps", w.ttps, ttpCell, "sessions");
       renderHours(w);
+      renderReputation(w.reputation, fillTable, (n) => fmt.format(n));
       fillTable("t-new-passwords", w.new.passwords, textCell);
       fillTable("t-new-commands", w.new.commands, textCell);
       fillTable("t-downloads", w.downloads.filter((d) => d.new), downloadCell);
