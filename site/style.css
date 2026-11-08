@@ -175,7 +175,8 @@ td.none { color: var(--muted); font-style: italic; }
   .feed li { grid-template-columns: 62px minmax(0, 1fr); }
   .feed .kind { display: none; }
   .feed .what { grid-column: 2; }
-  .site-header nav { gap: 14px; }
+  .site-header .wrap { flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; row-gap: 2px; }
+  .site-header nav { gap: 16px; }
 }
 
 @media (forced-colors: active) {
