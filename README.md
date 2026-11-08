@@ -76,6 +76,11 @@ six scheduled detections and the *Honeypot overview* dashboard. The detections a
 and false positives, in [docs/detections.md](docs/detections.md). Splunk runs as a 60-day Enterprise
 trial; after that the Free license still searches but doesn't run scheduled alerts.
 
+## Link preview
+
+`site/og-image.png` (1200x630, shown by LinkedIn and others) is rendered from `assets/og-image.html` with the same
+headless-Chrome command as in [uig-home](https://github.com/estul-lachin/uig-home#readme).
+
 ## Safety
 
 - **No outbound connections from the honeypot.** `uig-egress.sh` drops every NEW connection that
