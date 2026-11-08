@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Honeypot · Estul Lachin</title>
+<meta name="description" content="Live statistics from a Cowrie SSH/Telnet honeypot: who scans the internet, which passwords they try and what they run. No IP addresses are published.">
+<meta property="og:title" content="Honeypot · Estul Lachin">
+<meta property="og:description" content="Real SSH/Telnet attack traffic from a Cowrie honeypot, replayed on a world map.">
+<meta property="og:url" content="https://honeypot.uig.me/">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="https://lab.uig.me/">Estul Lachin</a>
+    <nav>
+      <a href="https://lab.uig.me/">Labs</a>
+      <a href="./" aria-current="page">Honeypot</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="intro">
+    <h1>Honeypot</h1>
+    <p class="lead">A <a href="https://github.com/cowrie/cowrie">Cowrie</a> SSH and Telnet honeypot on a small VPS in
+      South China. Every session below is real, unsolicited traffic from the internet: bots guessing passwords and
+      running their first commands on what they think is a server. Stats update hourly; the map replays the last
+      hour. No IP addresses are published.</p>
+  </section>
+
+  <div class="stats" id="stats" aria-live="polite">
+    <div class="stat"><span class="num" data-k="sessions">–</span><span class="label">Sessions</span></div>
+    <div class="stat"><span class="num" data-k="unique_sources">–</span><span class="label">Unique sources</span></div>
+    <div class="stat"><span class="num" data-k="login_attempts">–</span><span class="label">Login attempts</span></div>
+    <div class="stat"><span class="num" data-k="commands_run">–</span><span class="label">Commands run</span></div>
+    <div class="stat"><span class="num" data-k="countries">–</span><span class="label">Countries</span></div>
+  </div>
+  <p class="meta" id="since"></p>
+
+  <section class="card map-card" aria-labelledby="map-h">
+    <div class="card-head">
+      <div>
+        <h2 id="map-h">Last hour, replayed</h2>
+        <p class="meta" id="clock">Loading…</p>
+      </div>
+      <div class="controls" role="group" aria-label="Replay controls">
+        <button type="button" id="play" aria-pressed="true">Pause</button>
+        <span class="seg" role="radiogroup" aria-label="Replay speed">
+          <button type="button" data-speed="1" role="radio" aria-checked="false">1×</button>
+          <button type="button" data-speed="10" role="radio" aria-checked="true">10×</button>
+          <button type="button" data-speed="60" role="radio" aria-checked="false">60×</button>
+        </span>
+      </div>
+    </div>
+    <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+    <div class="map-wrap" id="map-wrap">
+      <svg id="map" viewBox="0 0 960 420" role="img" aria-labelledby="map-h map-desc">
+        <desc id="map-desc">World map shaded by sessions per country, with each new session drawn as a line from its
+          source to the honeypot. The same numbers are in the Countries table below.</desc>
+      </svg>
+      <div class="tooltip" id="tooltip" hidden></div>
+    </div>
+    <div class="legend">
+      <span class="legend-title">Sessions by country</span>
+      <span class="bins" id="bins"></span>
+      <span class="key"><span class="dot-src"></span>New session (replay)</span>
+      <span class="key"><span class="dot-target"></span>Honeypot</span>
+    </div>
+    <h3 class="feed-h">Event feed</h3>
+    <ol class="feed" id="feed" aria-live="off"></ol>
+  </section>
+
+  <section aria-labelledby="daily-h">
+    <h2 id="daily-h">Sessions per day</h2>
+    <div class="card"><svg id="daily" role="img" aria-label="Sessions per day, UTC"></svg></div>
+  </section>
+
+  <h2>What they try</h2>
+  <div class="tables">
+    <section class="card"><h3>Countries</h3><table id="t-countries"></table></section>
+    <section class="card"><h3>Usernames</h3><table id="t-usernames"></table></section>
+    <section class="card"><h3>Passwords</h3><table id="t-passwords"></table></section>
+    <section class="card"><h3>Username / password</h3><table id="t-pairs"></table></section>
+    <section class="card wide"><h3>Commands</h3><table id="t-commands" class="mono"></table></section>
+    <section class="card"><h3>SSH clients</h3><table id="t-clients" class="mono"></table></section>
+    <section class="card"><h3>Downloads attempted</h3>
+      <p class="meta">Outbound connections are blocked, so nothing is actually fetched. Hashes link to VirusTotal.</p>
+      <table id="t-downloads" class="mono"></table></section>
+  </div>
+
+  <section class="about">
+    <h2>How it works</h2>
+    <p>Cowrie listens on ports 22 and 23 and pretends to be a Linux server. It runs in a locked-down container that
+      cannot open outbound connections, so attackers can't use it against anyone else. Every hour a script turns the
+      raw logs into the aggregated JSON this page reads: IP addresses are reduced to country, city and coordinates
+      rounded to about 10 km; URLs and IPs inside commands are defanged (<code>hxxp[:]//</code>). The raw logs stay
+      on the server. Setup, hardening and the aggregation code are in the
+      <a href="https://github.com/estul-lachin/uig-honeypot">source repository</a>.</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a href="https://www.linkedin.com/in/estul-lachin">LinkedIn</a> ·
+    <a href="https://github.com/estul-lachin">GitHub</a> ·
+    <a href="https://github.com/estul-lachin/uig-honeypot">Source</a>
+    <p class="credit"><a href="https://db-ip.com">IP Geolocation by DB-IP</a> (CC BY 4.0) · Map: Natural Earth via
+      world-atlas · <span id="generated"></span></p>
+  </div>
+</footer>
+</body>
+</html>

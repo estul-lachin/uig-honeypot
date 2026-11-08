@@ -7,10 +7,14 @@ UMask=0022
 EnvironmentFile=-/opt/uig-honeypot/.env
 WorkingDirectory=/opt/uig-honeypot
 ExecStart=/usr/bin/python3 /opt/uig-honeypot/aggregate.py \
-  --logs data/var/log/cowrie --state data/state --out data/stats.json \
+  --logs data/var/log/cowrie --state data/state \
+  --out data/stats.json --recent-out data/recent.json \
+  --geoip data/geoip/dbip-city-lite.mmdb \
   "--redact=${HP_PUBLIC_IP}"
 # Raw logs, TTY recordings and downloads are kept for 30 days only; the
 # partials in data/state keep the history.
 ExecStartPost=/usr/bin/find data/var/log/cowrie -name 'cowrie.json.*' -mtime +30 -delete
 ExecStartPost=/usr/bin/find data/var/lib/cowrie/tty data/var/lib/cowrie/downloads -type f -mtime +30 -delete
+# Publishing is best effort: a GitHub outage must not fail the stats run.
+ExecStartPost=-/opt/uig-honeypot/publish.sh
 Nice=10

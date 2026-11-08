@@ -51,7 +51,8 @@ prepare() {
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -q
     apt-get install -yq --no-install-recommends \
-        docker.io docker-cli docker-compose apparmor iptables python3 unattended-upgrades ca-certificates
+        docker.io docker-cli docker-compose apparmor iptables python3 python3-maxminddb \
+        git unattended-upgrades ca-certificates
 
     say "Enabling automatic security updates"
     echo 'APT::Periodic::Update-Package-Lists "1";
@@ -104,9 +105,11 @@ install() {
     fi
     cd "$APP"
     say "Preparing data directories (Cowrie runs as uid 999)"
-    mkdir -p data/state data/var/log/cowrie data/var/lib/cowrie/tty data/var/lib/cowrie/downloads
+    mkdir -p data/state data/geoip data/var/log/cowrie data/var/lib/cowrie/tty data/var/lib/cowrie/downloads
     chown -R 999:999 data/var
-    chmod 755 uig-egress.sh aggregate.py
+    chmod 755 uig-egress.sh aggregate.py geoip-update.sh publish.sh
+    dpkg -s python3-maxminddb git >/dev/null 2>&1 \
+        || DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends python3-maxminddb git
 
     say "Installing systemd units"
     cp systemd/*.service systemd/*.timer /etc/systemd/system/
@@ -119,7 +122,8 @@ install() {
     docker compose version >/dev/null 2>&1 || compose=(docker-compose)
     say "Starting Cowrie"
     "${compose[@]}" up -d --remove-orphans
-    systemctl enable --now uig-aggregate.timer
+    systemctl enable --now uig-aggregate.timer uig-geoip.timer
+    [ -s data/geoip/dbip-city-lite.mmdb ] || { say "Downloading GeoIP database"; systemctl start uig-geoip.service; }
     systemctl start uig-aggregate.service || true
     "${compose[@]}" ps
 }

@@ -37,6 +37,7 @@ cmd_deploy() {
         echo "COWRIE_IMAGE=$COWRIE_IMAGE"
         echo "HP_PUBLIC_IP=${HP_PUBLIC_IP:-}"
         echo "HP_FAKE_HOSTNAME=${HP_FAKE_HOSTNAME:-db-backup-01}"
+        [ -z "${HP_DATA_REPO:-}" ] || echo "HP_DATA_REPO=git@github.com:$HP_DATA_REPO.git"
     } | remote "umask 077; cat >$APP/.env"
     remote bash -s install <"$ROOT/vps/harden.sh"
 }
@@ -49,6 +50,15 @@ cmd_build_image() {
     remote "bash $APP/build/build-image.sh"
 }
 
+# One-time: a deploy key on the VPS with write access to the data repo only.
+cmd_publish_setup() {
+    : "${HP_DATA_REPO:?set HP_DATA_REPO=owner/name in .env.local}"
+    local pub
+    pub=$(remote "k=$APP/data/deploy_key; mkdir -p $APP/data; [ -f \$k ] || ssh-keygen -q -t ed25519 -N '' -C uig-honeypot-vps -f \$k; cat \$k.pub")
+    say "Adding the VPS deploy key (write) to $HP_DATA_REPO"
+    gh repo deploy-key add - --repo "$HP_DATA_REPO" --allow-write --title "uig-honeypot VPS" <<<"$pub"
+}
+
 cmd_status() {
     remote "cd $APP && { docker compose ps 2>/dev/null || docker-compose ps; } \
         && systemctl --no-pager list-timers uig-aggregate.timer \
@@ -56,12 +66,15 @@ cmd_status() {
 }
 
 cmd_fetch() {
+    local f
     mkdir -p "$ROOT/site/data"
-    remote "cat $APP/data/stats.json" >"$ROOT/site/data/stats.json.tmp"
-    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$ROOT/site/data/stats.json.tmp" \
-        || die "fetched stats.json is not valid JSON"
-    mv "$ROOT/site/data/stats.json.tmp" "$ROOT/site/data/stats.json"
-    say "Saved site/data/stats.json (review it, then commit when ready)"
+    for f in stats.json recent.json; do
+        remote "cat $APP/data/$f" >"$ROOT/site/data/$f.tmp"
+        python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$ROOT/site/data/$f.tmp" \
+            || die "fetched $f is not valid JSON"
+        mv "$ROOT/site/data/$f.tmp" "$ROOT/site/data/$f"
+    done
+    say "Saved site/data/ (local preview only; git-ignored)"
 }
 
 cmd_logs() { remote "tail -n 50 -F $APP/data/var/log/cowrie/cowrie.json"; }
@@ -75,12 +88,13 @@ First-time setup, in order:
   prepare      install packages; real sshd on 22 AND HP_SSH_PORT (uses port 22)
   finalize     drop 22 from the real sshd (connects on HP_SSH_PORT to prove it works)
   build-image  only if the VPS can't reach Docker Hub: build Cowrie on the VPS from source
+  publish-setup  give the VPS a deploy key for HP_DATA_REPO (then deploy again)
   deploy       copy vps/ to the VPS, install units, start Cowrie
 
 Day to day:
   status       containers, timer, current totals
   logs         follow the raw Cowrie log (private: never paste it anywhere public)
-  fetch        download the public stats.json into site/data/
+  fetch        download stats.json and recent.json into site/data/ for a local preview
   ssh          shell on the VPS
 EOF
 }
@@ -88,5 +102,6 @@ EOF
 case "${1:-help}" in
     prepare|finalize|deploy|status|fetch|logs|ssh|help) "cmd_${1}" ;;
     build-image) cmd_build_image ;;
+    publish-setup) cmd_publish_setup ;;
     *) cmd_help; exit 1 ;;
 esac

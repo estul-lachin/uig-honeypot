@@ -1,0 +1,11 @@
+[Unit]
+Description=Update the DB-IP Lite City database monthly
+
+[Timer]
+# DB-IP publishes early in the month
+OnCalendar=*-*-03 04:00:00
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

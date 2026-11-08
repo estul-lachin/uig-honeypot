@@ -3,6 +3,8 @@
 All IPs below are from documentation ranges (RFC 5737), never real hosts.
 """
 
+import argparse
+import datetime
 import json
 import os
 import sys
@@ -13,6 +15,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vps"))
 import aggregate  # noqa: E402
 
 HONEYPOT_IP = "203.0.113.10"
+NOW = datetime.datetime(2026, 11, 2, 3, 30, tzinfo=datetime.timezone.utc)
+
+
+class FakeReader:
+    """Stands in for maxminddb: same record shape as DB-IP Lite City."""
+    DB = {
+        "198.51.100.7": {"country": {"iso_code": "BR"}, "city": {"names": {"en": "S\u00e3o Paulo"}},
+                         "location": {"latitude": -23.5475123, "longitude": -46.6361234}},
+        "198.51.100.8": {"country": {"iso_code": "VN"}},
+    }
+
+    def get(self, ip):
+        return self.DB.get(ip)
 
 
 def ev(eventid, ts, **kw):
@@ -93,6 +108,43 @@ class AggregateTest(unittest.TestCase):
         _, s = self.run_agg()
         self.assertEqual(s["totals"]["sessions"], 3)
         self.assertEqual(s["downloads"][0]["sha256"], "ab" * 32)
+
+    def run_geo(self):
+        recent = os.path.join(self.tmp.name, "recent.json")
+        a = argparse.Namespace(logs=self.logs, state=self.state, out=self.out, recent_out=recent,
+                               redact=[HONEYPOT_IP], exclude_ip=["198.51.100.99"])
+        aggregate.run(a, aggregate.Geo(reader=FakeReader()), NOW)
+        with open(self.out) as fh:
+            stats = json.load(fh)
+        with open(recent) as fh:
+            raw = fh.read()
+        return stats, raw, json.loads(raw)
+
+    def test_countries(self):
+        stats, _, _ = self.run_geo()
+        self.assertEqual(stats["countries"], {"BR": 2, "VN": 1})
+
+    def test_recent_window_and_privacy(self):
+        _, raw, r = self.run_geo()
+        # only the live file's events fall in the hour before NOW
+        self.assertEqual([e["kind"] for e in r["events"]], ["connect", "login"])
+        e = r["events"][0]
+        self.assertEqual((e["cc"], e["city"], e["lat"], e["lon"]), ("BR", "S\u00e3o Paulo", -23.5, -46.6))
+        self.assertEqual(r["events"][1]["text"], "root / 123456")
+        self.assertNotIn("198.51.100", raw)
+        self.assertNotIn("src_ip", raw)
+
+    def test_recent_spans_midnight_rotation(self):
+        self.write("cowrie.json.2026-11-01", DAY1 + [
+            ev("cowrie.session.connect", "2026-11-02T02:59:00.000Z", src_ip="198.51.100.8", protocol="telnet")])
+        os.utime(os.path.join(self.logs, "cowrie.json.2026-11-01"), (NOW.timestamp(), NOW.timestamp()))
+        _, _, r = self.run_geo()
+        self.assertEqual([e["kind"] for e in r["events"]], ["connect", "connect", "login"])
+
+    def test_escaped_control_bytes(self):
+        self.assertEqual(aggregate.clean("enable\\x00", []), "enable")
+        self.assertEqual(aggregate.clean("a\\x1bb", []), "a b")
+        self.assertEqual(aggregate.clean("keep \\x41", []), "keep \\x41")
 
     def test_empty(self):
         os.remove(os.path.join(self.logs, "cowrie.json.2026-11-01"))

@@ -1,0 +1,9 @@
+[Unit]
+Description=Update the DB-IP Lite City database
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/uig-honeypot/geoip-update.sh
+Nice=10
