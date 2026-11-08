@@ -1,0 +1,16 @@
+[Unit]
+Description=Build public honeypot stats and prune old raw logs
+
+[Service]
+Type=oneshot
+UMask=0022
+EnvironmentFile=-/opt/uig-honeypot/.env
+WorkingDirectory=/opt/uig-honeypot
+ExecStart=/usr/bin/python3 /opt/uig-honeypot/aggregate.py \
+  --logs data/var/log/cowrie --state data/state --out data/stats.json \
+  "--redact=${HP_PUBLIC_IP}"
+# Raw logs, TTY recordings and downloads are kept for 30 days only; the
+# partials in data/state keep the history.
+ExecStartPost=/usr/bin/find data/var/log/cowrie -name 'cowrie.json.*' -mtime +30 -delete
+ExecStartPost=/usr/bin/find data/var/lib/cowrie/tty data/var/lib/cowrie/downloads -type f -mtime +30 -delete
+Nice=10

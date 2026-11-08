@@ -1,0 +1,10 @@
+[Unit]
+Description=Build honeypot stats every hour
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

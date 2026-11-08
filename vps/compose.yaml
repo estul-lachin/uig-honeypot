@@ -1,0 +1,45 @@
+name: uig-honeypot
+
+# Cowrie SSH/Telnet honeypot. Host ports 22 and 23 go to the container;
+# the real sshd must already listen on another port (see harden.sh).
+services:
+  cowrie:
+    # Override with COWRIE_IMAGE in .env when Docker Hub is unreachable
+    # (e.g. uig/cowrie:3.1.3 built on the VPS by `./hp build-image`).
+    image: ${COWRIE_IMAGE:-cowrie/cowrie:3.1.3}
+    restart: unless-stopped
+    ports:
+      - "22:2222"
+      - "23:2223"
+    environment:
+      # Any cowrie.cfg key can be set as COWRIE_<SECTION>_<KEY>.
+      COWRIE_HONEYPOT_HOSTNAME: ${HP_FAKE_HOSTNAME:-db-backup-01}
+      COWRIE_HONEYPOT_DOWNLOAD_LIMIT_SIZE: "1048576"
+      COWRIE_TELNET_ENABLED: "true"
+      # Never relay attacker traffic to other hosts.
+      COWRIE_SSH_FORWARDING: "false"
+      COWRIE_SSH_FORWARD_REDIRECT: "false"
+      COWRIE_SSH_FORWARD_TUNNEL: "false"
+    volumes:
+      - ./data/var:/cowrie/cowrie-git/var
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 256
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [cowrie]
+
+networks:
+  cowrie:
+    driver_opts:
+      # Fixed name so uig-egress.sh can match it.
+      com.docker.network.bridge.name: br-cowrie

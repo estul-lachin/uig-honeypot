@@ -1,0 +1,13 @@
+[Unit]
+Description=Block outbound connections from the honeypot network
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/uig-honeypot/uig-egress.sh
+
+[Install]
+WantedBy=multi-user.target docker.service

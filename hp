@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# hp: manage the uig-honeypot VPS from the Mac. Settings live in .env.local
+# (git-ignored, never published). Run ./hp help.
+set -euo pipefail
+umask 022
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+APP=/opt/uig-honeypot
+
+die() { echo "error: $*" >&2; exit 1; }
+say() { echo "==> $*"; }
+
+[ -f "$ROOT/.env.local" ] || die "copy .env.example to .env.local and fill it in"
+# shellcheck source=/dev/null
+. "$ROOT/.env.local"
+: "${HP_HOST:?set HP_HOST in .env.local}"
+: "${HP_SSH_PORT:?set HP_SSH_PORT in .env.local}"
+HP_USER=${HP_USER:-root}
+COWRIE_IMAGE=${COWRIE_IMAGE:-cowrie/cowrie:3.1.3}
+
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=30)
+on22()   { ssh "${SSH_OPTS[@]}" -p 22 "$HP_USER@$HP_HOST" "$@"; }
+remote() { ssh "${SSH_OPTS[@]}" -p "$HP_SSH_PORT" "$HP_USER@$HP_HOST" "$@"; }
+
+cmd_prepare()  { on22 bash -s prepare "$HP_SSH_PORT" <"$ROOT/vps/harden.sh"; }
+cmd_finalize() { remote bash -s finalize "$HP_SSH_PORT" <"$ROOT/vps/harden.sh"; }
+
+sync_files() {
+    say "Copying vps/ to $APP"
+    remote "mkdir -p $APP"
+    # COPYFILE_DISABLE keeps macOS ._ metadata files out of the tar.
+    COPYFILE_DISABLE=1 tar -C "$ROOT/vps" -cf - . | remote "tar -xf - -C $APP --no-same-owner"
+}
+
+cmd_deploy() {
+    sync_files
+    {
+        echo "COWRIE_IMAGE=$COWRIE_IMAGE"
+        echo "HP_PUBLIC_IP=${HP_PUBLIC_IP:-}"
+        echo "HP_FAKE_HOSTNAME=${HP_FAKE_HOSTNAME:-db-backup-01}"
+    } | remote "umask 077; cat >$APP/.env"
+    remote bash -s install <"$ROOT/vps/harden.sh"
+}
+
+# For networks where Docker Hub is unreachable: build uig/cowrie on the VPS
+# from source, using only in-country mirrors (see vps/build/build-image.sh).
+# Then set COWRIE_IMAGE=uig/cowrie:<version> in .env.local.
+cmd_build_image() {
+    sync_files
+    remote "bash $APP/build/build-image.sh"
+}
+
+cmd_status() {
+    remote "cd $APP && { docker compose ps 2>/dev/null || docker-compose ps; } \
+        && systemctl --no-pager list-timers uig-aggregate.timer \
+        && python3 -c 'import json; s=json.load(open(\"data/stats.json\")); print(\"generated\", s[\"generated_at\"]); print(json.dumps(s[\"totals\"], indent=1))'"
+}
+
+cmd_fetch() {
+    mkdir -p "$ROOT/site/data"
+    remote "cat $APP/data/stats.json" >"$ROOT/site/data/stats.json.tmp"
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$ROOT/site/data/stats.json.tmp" \
+        || die "fetched stats.json is not valid JSON"
+    mv "$ROOT/site/data/stats.json.tmp" "$ROOT/site/data/stats.json"
+    say "Saved site/data/stats.json (review it, then commit when ready)"
+}
+
+cmd_logs() { remote "tail -n 50 -F $APP/data/var/log/cowrie/cowrie.json"; }
+cmd_ssh()  { ssh "${SSH_OPTS[@]}" -p "$HP_SSH_PORT" "$HP_USER@$HP_HOST"; }
+
+cmd_help() {
+    cat <<'EOF'
+usage: ./hp <command>
+
+First-time setup, in order:
+  prepare      install packages; real sshd on 22 AND HP_SSH_PORT (uses port 22)
+  finalize     drop 22 from the real sshd (connects on HP_SSH_PORT to prove it works)
+  build-image  only if the VPS can't reach Docker Hub: build Cowrie on the VPS from source
+  deploy       copy vps/ to the VPS, install units, start Cowrie
+
+Day to day:
+  status       containers, timer, current totals
+  logs         follow the raw Cowrie log (private: never paste it anywhere public)
+  fetch        download the public stats.json into site/data/
+  ssh          shell on the VPS
+EOF
+}
+
+case "${1:-help}" in
+    prepare|finalize|deploy|status|fetch|logs|ssh|help) "cmd_${1}" ;;
+    build-image) cmd_build_image ;;
+    *) cmd_help; exit 1 ;;
+esac
