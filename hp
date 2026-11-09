@@ -39,6 +39,10 @@ cmd_deploy() {
         echo "HP_FAKE_HOSTNAME=${HP_FAKE_HOSTNAME:-db-backup-01}"
         [ -z "${HP_DATA_REPO:-}" ] || echo "HP_DATA_REPO=git@github.com:$HP_DATA_REPO.git"
         [ -z "${HP_ABUSEIPDB_KEY:-}" ] || echo "HP_ABUSEIPDB_KEY=$HP_ABUSEIPDB_KEY"
+        local v
+        for v in HP_AZ_TENANT HP_AZ_CLIENT_ID HP_AZ_CLIENT_SECRET HP_AZ_DCE HP_AZ_DCR; do
+            [ -z "${!v:-}" ] || echo "$v=${!v}"
+        done
     } | remote "umask 077; cat >$APP/.env"
     remote bash -s install <"$ROOT/vps/harden.sh"
 }

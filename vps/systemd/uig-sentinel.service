@@ -1,0 +1,12 @@
+[Unit]
+Description=Ship new Cowrie events to Microsoft Sentinel
+After=network-online.target
+
+[Service]
+Type=oneshot
+UMask=0077
+EnvironmentFile=-/opt/uig-honeypot/.env
+WorkingDirectory=/opt/uig-honeypot
+ExecStart=/usr/bin/python3 /opt/uig-honeypot/sentinel.py --logs data/var/log/cowrie --state data/sentinel/state.json
+Nice=10
+TimeoutStartSec=15min

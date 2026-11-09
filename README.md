@@ -10,6 +10,7 @@ links get published.
 VPS (Debian 13)
 ├─ real sshd on a high port, key-only
 ├─ Docker: Cowrie on 22/23, read-only, no capabilities, no outbound connections
+├─ every 10 minutes: sentinel.py → new events to Microsoft Sentinel (Logs Ingestion API, write-only identity)
 └─ hourly systemd timer
      enrich.py    → AbuseIPDB lookups of new source IPs (check only, never reports; cache stays private)
      aggregate.py → stats.json + recent.json (GeoIP: country/city/coords, never IPs)
@@ -75,6 +76,20 @@ summary with no IPs: score ranges, how many sources had never been reported, net
 Setup: create a free AbuseIPDB account and API key, put `HP_ABUSEIPDB_KEY=...` in `.env.local`, then
 `./hp deploy`. The key is written to `/opt/uig-honeypot/.env` (mode 600) and read from the environment,
 never from the command line. Without a key the step is skipped.
+
+## Microsoft Sentinel
+
+The raw events also go to a Log Analytics workspace with Microsoft Sentinel (Canada Central).
+`vps/sentinel.py` runs every 10 minutes, reads only what was appended to `cowrie.json` since the last
+run (it follows the daily rotation by inode), and posts gzip batches to the Azure Monitor Logs Ingestion
+API. A data collection rule turns Cowrie's `timestamp` into `TimeGenerated` and writes the `Cowrie_CL`
+table. The VPS's service principal has only *Monitoring Metrics Publisher* on that one rule: it can add
+rows and nothing else. Its settings (`HP_AZ_*`) go from `.env.local` to `/opt/uig-honeypot/.env` (mode 600).
+
+The analytics rules come from [uig-detections](https://github.com/estul-lachin/uig-detections): the same
+Sigma rules as detections.uig.me, converted to KQL, checked in Sentinel against test events and deployed
+as scheduled rules that raise incidents grouped by source IP. The workspace has a 0.1 GB daily cap and the
+subscription a CAD 5 monthly budget alert; the honeypot sends a few MB a day.
 
 ## Local SIEM (Splunk)
 
