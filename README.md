@@ -15,6 +15,8 @@ VPS (Debian 13)
      enrich.py    → AbuseIPDB lookups of new source IPs (check only, never reports; cache stays private)
      aggregate.py → stats.json + recent.json (GeoIP: country/city/coords, never IPs)
                     ATT&CK tags from ttp_rules.json; weekly.py → reports/YYYY-Www.json per finished week
+     detect.py    → detections.json: where the detections.uig.me Sigma rules fired in the last 30 days
+                    (rules from detections.uig.me/rules.json, run by a copy of its evaluator, sigma_eval.py)
      publish.sh   → force-push one commit to the uig-honeypot-data repo (deploy key, that repo only)
 GitHub
 ├─ uig-honeypot-data: the JSON files, replaced hourly
@@ -121,7 +123,8 @@ headless-Chrome command as in [uig-home](https://github.com/estul-lachin/uig-hom
 - **Published data is sanitized.** stats.json has no source IPs, only unique counts. The VPS's own IP
   is replaced with `[honeypot-ip]`. IPs and URLs are defanged (`hxxp[:]//192[.]0[.]2[.]1`),
   control characters are stripped, and strings are capped at 120 characters. Malware is listed by
-  SHA-256 only and is never published as a file. See `tests/test_aggregate.py`.
+  SHA-256 only and is never published as a file. See `tests/test_aggregate.py`. detections.json
+  holds only counts, days and one example command per rule, cleaned the same way (`tests/test_detect.py`).
 - **The VPS can't touch this repo.** Its deploy key writes only to the data repo, so a compromised
   VPS could at worst publish bad numbers, not change the page's code.
 - **Never log in to port 22 with a real password.** Cowrie accepts it, and the password would
