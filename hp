@@ -136,6 +136,14 @@ cmd_siem() {
     esac
 }
 
+# Network security monitoring: Suricata as a passive IDS on eth0 (vps/suricata/).
+cmd_nsm_setup() {
+    sync_files
+    remote "bash $APP/suricata/setup.sh"
+}
+# Read-only summary; prints counts and signature names, never addresses.
+cmd_nsm() { remote "python3 $APP/suricata/report.py ${1:-24}"; }
+
 cmd_logs() { remote "tail -n 50 -F $APP/data/var/log/cowrie/cowrie.json"; }
 cmd_ssh()  { ssh "${SSH_OPTS[@]}" -p "$HP_SSH_PORT" "$HP_USER@$HP_HOST"; }
 
@@ -156,6 +164,10 @@ Day to day:
   fetch        download stats.json and recent.json into site/data/ for a local preview
   pull         copy the raw Cowrie logs into logs/ (private, git-ignored) for the local Splunk
 
+Network security monitoring (Suricata, passive, alerts stay on the VPS):
+  nsm-setup    add swap, install Suricata and the daily rule update, start it (idempotent)
+  nsm [HOURS]  memory, packet drops, alert volume and top signatures (default: last 24 h)
+
 Local Splunk (siem/, needs HP_SPLUNK_PASSWORD in .env.local):
   siem up      start Splunk on http://127.0.0.1:8010 with the honeypot app
   siem reload  regenerate the ATT&CK macro and restart Splunk after app changes
@@ -169,6 +181,8 @@ case "${1:-help}" in
     prepare|finalize|deploy|status|fetch|pull|logs|ssh|help) "cmd_${1}" ;;
     siem) cmd_siem "${2:-}" ;;
     build-image) cmd_build_image ;;
+    nsm-setup) cmd_nsm_setup ;;
+    nsm) cmd_nsm "${2:-24}" ;;
     publish-setup) cmd_publish_setup ;;
     *) cmd_help; exit 1 ;;
 esac

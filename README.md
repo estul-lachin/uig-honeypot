@@ -91,7 +91,25 @@ rows and nothing else. Its settings (`HP_AZ_*`) go from `.env.local` to `/opt/ui
 The analytics rules come from [uig-detections](https://github.com/estul-lachin/uig-detections): the same
 Sigma rules as detections.uig.me, converted to KQL, checked in Sentinel against test events and deployed
 as scheduled rules that raise incidents grouped by source IP. The workspace has a 0.1 GB daily cap and the
-subscription a CAD 5 monthly budget alert; the honeypot sends a few MB a day.
+subscription a CAD 5 monthly budget alert; the honeypot sends a few MB a day. SOAR playbooks in
+uig-detections (`soar/`) enrich, triage and escalate the incidents.
+
+## Network monitoring (Suricata)
+
+Cowrie only sees what reaches its SSH and Telnet ports. Suricata watches everything on `eth0` as a
+passive IDS: it never blocks, it only alerts. `./hp nsm-setup` (idempotent) does it in `vps/suricata/`:
+
+- adds a 1 GB swapfile (the VPS had none) and installs Debian's Suricata 7 and `suricata-update`;
+- writes `/etc/suricata/uig-suricata.yaml` from the package's config with `make-config.py`, which
+  replaces only what matters here: `HOME_NET` (this VPS and the Cowrie network), alerts-only `eve.json`
+  plus 5-minute engine counters in `stats.json`, the "low" detection profile and small memcaps;
+- runs the package's unit with that config, capped at 700 MB of memory and restarted on failure, so a
+  spike restarts Suricata instead of the OOM killer picking Cowrie;
+- updates the ET Open rules daily (`uig-suricata-update.timer`).
+
+Captures happen before Docker's NAT, so alerts carry the real source address; like the Cowrie logs, they
+stay on the VPS. `./hp nsm [HOURS]` prints memory, packet drops, alert volume and the top signatures,
+with no addresses. To turn it off: `systemctl disable --now suricata uig-suricata-update.timer`.
 
 ## Local SIEM (Splunk)
 
