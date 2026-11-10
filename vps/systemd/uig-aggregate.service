@@ -20,7 +20,8 @@ ExecStartPost=/usr/bin/find data/var/log/cowrie -name 'cowrie.json.*' -mtime +30
 ExecStartPost=/usr/bin/find data/var/lib/cowrie/tty data/var/lib/cowrie/downloads -type f -mtime +30 -delete
 # Run the detections.uig.me rules on the same logs (best effort, see detect.py).
 ExecStartPost=-/usr/bin/python3 /opt/uig-honeypot/detect.py \
-  --logs data/var/log/cowrie --out data/detections.json --rules-cache data/state/detections-rules.json \
+  --logs data/var/log/cowrie --suricata-logs /var/log/suricata \
+  --out data/detections.json --rules-cache data/state/detections-rules.json \
   "--redact=${HP_PUBLIC_IP}" "--exclude-ip=${HP_PUBLIC_IP}"
 # Publishing is best effort: a GitHub outage must not fail the stats run.
 ExecStartPost=-/opt/uig-honeypot/publish.sh

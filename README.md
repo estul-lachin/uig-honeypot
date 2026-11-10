@@ -17,8 +17,9 @@ VPS (Debian 13)
      enrich.py    → AbuseIPDB lookups of new source IPs (check only, never reports; cache stays private)
      aggregate.py → stats.json + recent.json (GeoIP: country/city/coords, never IPs)
                     ATT&CK tags from ttp_rules.json; weekly.py → reports/YYYY-Www.json per finished week
-     detect.py    → detections.json: where the detections.uig.me Sigma rules fired in the last 30 days
-                    (rules from detections.uig.me/rules.json, run by a copy of its evaluator, sigma_eval.py)
+     detect.py    → detections.json: where the detections.uig.me Sigma rules fired in the last 30 days,
+                    on Cowrie's logs and Suricata's alerts (rules from detections.uig.me/rules.json, run
+                    by a copy of its evaluator, sigma_eval.py)
      publish.sh   → force-push one commit to the uig-honeypot-data repo (deploy key, that repo only)
 GitHub
 ├─ uig-honeypot-data: the JSON files, replaced hourly

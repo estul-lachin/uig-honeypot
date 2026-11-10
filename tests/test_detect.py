@@ -5,6 +5,7 @@ IPs are from the RFC 5737 documentation ranges.
 """
 
 import datetime
+import gzip
 import io
 import json
 import os
@@ -140,6 +141,71 @@ class DetectTest(unittest.TestCase):
 
     def test_fetch_without_cache_returns_none(self):
         self.assertIsNone(detect.fetch_rules("u", self.cache, failing_opener))
+
+
+
+SURICATA_RULES = {"version": 1, "rules": [
+    {"name": "exploit", "id": "id-exploit", "title": "Exploit", "level": "high",
+     "detection": {"selection": {"signature|startswith": "ET EXPLOIT "}, "condition": "selection"}},
+    {"name": "scan_login", "id": "id-scan-login", "title": "Scan then login", "level": "medium",
+     "correlation": {"type": "temporal", "rules": ["scan", "login"], "group-by": ["src_ip"], "timespan": "1h"},
+     "base": {"scan": {"selection": {"signature|startswith": "ET SCAN "}, "condition": "selection"},
+              "login": {"selection": {"eventid": "cowrie.login.success"}, "condition": "selection"}}},
+]}
+
+
+def eve(ts, sig, src="203.0.113.20", event_type="alert"):
+    """A raw eve.json line, as Suricata writes it (Beijing time, nested alert)."""
+    return {"timestamp": ts, "event_type": event_type, "src_ip": src, "src_port": 40000,
+            "dest_ip": "192.0.2.10", "dest_port": 23, "proto": "TCP",
+            "alert": {"signature_id": 1, "rev": 1, "signature": sig, "category": "Misc Attack", "severity": 2}}
+
+
+class DetectSuricataTest(DetectTest):
+    def setUp(self):
+        super().setUp()
+        self.eve = os.path.join(self.tmp.name, "suricata")
+        os.makedirs(self.eve)
+
+    def run_suricata(self):
+        return detect.run(self.logs, SURICATA_RULES, NOW, redact=[HONEYPOT_IP], exclude=[HONEYPOT_IP],
+                          suricata_logs=self.eve)
+
+    def write_eve(self, name, events, gz=False):
+        data = "".join(json.dumps(e) + "\n" for e in events).encode()
+        path = os.path.join(self.eve, name)
+        with (gzip.open(path, "wb") if gz else open(path, "wb")) as fh:
+            fh.write(data)
+
+    def test_suricata_rule_counts_alerts_and_sources_not_sessions(self):
+        self.write_eve("eve.json", [eve("2026-11-09T17:00:00.000000+0800", "ET EXPLOIT Example A"),
+                                    eve("2026-11-09T17:05:00.000000+0800", "ET EXPLOIT Example B"),
+                                    eve("2026-11-09T17:06:00.000000+0800", "ET EXPLOIT Example C", src="203.0.113.21"),
+                                    eve("2026-11-09T17:07:00.000000+0800", "ET EXPLOIT Example D", event_type="flow"),
+                                    eve("2026-11-09T17:08:00.000000+0800", "ET SCAN Example")])
+        h = self.run_suricata()["rules"]["exploit"]
+        self.assertEqual((h["alerts"], h["sources"], h["sessions"]), (3, 2, 0))
+        self.assertEqual(h["first_seen"], "2026-11-09")   # 17:00 Beijing time is 09:00 UTC
+
+    def test_reads_compressed_rotations(self):
+        self.write_eve("eve.json.1.gz", [eve("2026-11-08T12:00:00.000000+0800", "ET EXPLOIT Old")], gz=True)
+        self.write_eve("eve.json", [])
+        self.assertEqual(self.run_suricata()["rules"]["exploit"]["alerts"], 1)
+
+    def test_correlation_across_cowrie_and_suricata(self):
+        self.write_eve("eve.json", [eve("2026-11-09T17:05:00.000000+0800", "ET SCAN Example", src="198.51.100.7"),
+                                    eve("2026-11-09T17:05:00.000000+0800", "ET SCAN Example", src="198.51.100.9")])
+        self.write_log("cowrie.json", [{"eventid": "cowrie.login.success", "timestamp": "2026-11-09T09:30:00Z",
+                                        "src_ip": "198.51.100.7", "session": "s1"},
+                                       {"eventid": "cowrie.login.success", "timestamp": "2026-11-09T09:30:00Z",
+                                        "src_ip": "198.51.100.8", "session": "s2"}])
+        h = self.run_suricata()["rules"]["scan_login"]
+        self.assertEqual((h["alerts"], h["sessions"], h["sources"]), (1, 1, 1))
+
+    def test_without_suricata_logs_suricata_rules_stay_at_zero(self):
+        self.write_eve("eve.json", [eve("2026-11-09T17:00:00.000000+0800", "ET EXPLOIT Example A")])
+        out = detect.run(self.logs, SURICATA_RULES, NOW)
+        self.assertEqual(out["rules"]["exploit"]["alerts"], 0)
 
 
 if __name__ == "__main__":

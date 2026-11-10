@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
-"""Run the uig-detections Sigma rules on the raw Cowrie logs and write detections.json.
+"""Run the uig-detections Sigma rules on the raw Cowrie logs and Suricata alerts; write detections.json.
 
 The rules come from https://detections.uig.me/rules.json, the Sigma logic as plain data, built
 by uig-detections. The last good copy is cached, so a failed download only means older rules.
 sigma_eval.py next to this script is a verbatim copy of uig-detections' tools/sigma_eval.py,
 the evaluator its CI tests run on, so a rule counts here exactly as it does in its tests.
 
-The output never contains IP addresses: per rule, the sessions and alerts in the last --days
-days, the first and last day it fired, and the most common matching command, cleaned with
-aggregate.clean() (URLs and IPv4 addresses defanged, the honeypot's own IP redacted).
-detections.uig.me reads it back when it builds.
+With --suricata-logs, Suricata's alerts (eve.json and its rotations) are read too, flattened by
+sentinel.shape_suricata() exactly as they go to Sentinel's Suricata_CL, so rules on Suricata and
+correlations across both sensors (joined by src_ip) count here as they do there.
+
+The output never contains IP addresses: per rule, the Cowrie sessions, the number of distinct
+sources and the alerts in the last --days days, the first and last day it fired, and the most
+common matching command, cleaned with aggregate.clean() (URLs and IPv4 addresses defanged, the
+honeypot's own IP redacted). detections.uig.me reads it back when it builds.
 """
 
 import argparse
 import collections
 import datetime
 import glob
+import gzip
 import json
 import os
 import sys
 import urllib.request
 
 import aggregate
+import sentinel
 import sigma_eval
 
 RULES_URL = "https://detections.uig.me/rules.json"
@@ -65,20 +71,36 @@ def compile_rules(data):
     return out
 
 
-def events(logs, since, exclude):
-    """Events at or after `since` (epoch seconds), oldest file first. Bad lines are skipped."""
-    for path in sorted(glob.glob(os.path.join(logs, "cowrie.json*"))):
+def _read(paths, since, exclude, shape=None):
+    for path in paths:
         if path.endswith(".tmp"):
             continue
-        with open(path, encoding="utf-8", errors="replace") as fh:
+        opener = gzip.open if path.endswith(".gz") else open
+        try:
+            fh = opener(path, "rt", encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with fh:
             for line in fh:
                 try:
                     ev = json.loads(line)
+                    if shape:
+                        ev = shape(ev)
                     t = aggregate.epoch(ev["timestamp"])
-                except (ValueError, KeyError, TypeError, AttributeError):
+                except (ValueError, KeyError, TypeError, AttributeError, OSError, EOFError):
                     continue
                 if t >= since and ev.get("src_ip") not in exclude:
                     yield ev
+
+
+def events(logs, since, exclude, suricata_logs=None):
+    """Cowrie events, then Suricata alerts, at or after `since` (epoch seconds). Bad lines are skipped.
+
+    Correlations sort their events by time, so the two sources need not be interleaved."""
+    yield from _read(sorted(glob.glob(os.path.join(logs, "cowrie.json*"))), since, exclude)
+    if suricata_logs:
+        yield from _read(sorted(glob.glob(os.path.join(suricata_logs, "eve.json*"))), since, exclude,
+                         sentinel.shape_suricata)
 
 
 def readable(cmd):
@@ -90,9 +112,12 @@ def readable(cmd):
 class Hits:
     def __init__(self):
         self.sessions, self.days, self.alerts, self.examples = set(), set(), 0, collections.Counter()
+        self.sources = set()  # only counted, never written out
 
     def add(self, ev):
-        self.sessions.add(str(ev.get("session")))
+        if ev.get("session"):  # Cowrie events; Suricata alerts have none
+            self.sessions.add(str(ev["session"]))
+        self.sources.add(str(ev.get("src_ip")))
         self.days.add(str(ev["timestamp"])[:10])
         if ev.get("eventid") == "cowrie.command.input" and ev.get("input"):
             # counted raw: cleaning first would merge hex chunks into one meaningless line
@@ -102,12 +127,13 @@ class Hits:
         days = sorted(self.days)
         ranked = [x for x, _ in self.examples.most_common()]
         example = next((x for x in ranked if readable(x)), ranked[0] if ranked else None)
-        return {"id": rule.get("id"), "sessions": len(self.sessions), "alerts": self.alerts,
+        return {"id": rule.get("id"), "sessions": len(self.sessions), "sources": len(self.sources),
+                "alerts": self.alerts,
                 "first_seen": days[0] if days else None, "last_seen": days[-1] if days else None,
                 "example": aggregate.clean(example, redact) if example is not None else None}
 
 
-def run(logs, rules, now, days=DAYS, redact=(), exclude=()):
+def run(logs, rules, now, days=DAYS, redact=(), exclude=(), suricata_logs=None):
     redact = [r for r in redact if r]
     exclude = {x for x in exclude if x}
     since = now.timestamp() - days * 86400
@@ -122,7 +148,7 @@ def run(logs, rules, now, days=DAYS, redact=(), exclude=()):
         print(f"warning: dropping rule {r.get('name')}: {e}", file=sys.stderr)
         broken.add(r["name"])
 
-    for ev in events(logs, since, exclude):
+    for ev in events(logs, since, exclude, suricata_logs):
         for r, kind, m in compiled:
             if r["name"] in broken:
                 continue
@@ -160,6 +186,7 @@ def run(logs, rules, now, days=DAYS, redact=(), exclude=()):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--logs", required=True, help="Cowrie log directory")
+    ap.add_argument("--suricata-logs", help="Suricata log directory (eve.json); optional")
     ap.add_argument("--out", required=True, help="detections.json to write")
     ap.add_argument("--rules-url", default=RULES_URL)
     ap.add_argument("--rules-cache", required=True, help="last good rules.json")
@@ -174,7 +201,7 @@ def main(argv=None):
         print("no rules (download failed and no cache); detections.json not written", file=sys.stderr)
         return 1
     now = datetime.datetime.now(datetime.timezone.utc)
-    aggregate.atomic_write(a.out, run(a.logs, rules, now, a.days, a.redact, a.exclude_ip))
+    aggregate.atomic_write(a.out, run(a.logs, rules, now, a.days, a.redact, a.exclude_ip, a.suricata_logs))
     return 0
 
 
