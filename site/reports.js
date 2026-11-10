@@ -168,18 +168,22 @@
     }
   }
 
+  // notes/index.json (written by the Pages workflow) lists the weeks that have a notes file, so a week
+  // without one costs no failed request. The whole card stays hidden unless there are notes to show.
+  const noteWeeks = get("notes/index.json").then((idx) => idx.weeks || []).catch(() => []);
+
   function renderNotes(week) {
-    const box = $("notes");
+    const box = $("notes"), card = box.closest(".notes");
     box.replaceChildren();
-    get("notes/" + week + ".md", "text").then((md) => {
-      if (!md.trim()) throw new Error("empty");
-      renderMarkdown(box, md);
-    }).catch(() => {
-      const p = document.createElement("p");
-      p.className = "meta";
-      p.textContent = "No notes for this week yet.";
-      box.appendChild(p);
-    });
+    card.hidden = true;
+    noteWeeks.then((weeks) => {
+      if (!weeks.includes(week)) return;
+      return get("notes/" + week + ".md", "text").then((md) => {
+        if (!md.trim() || $("week").value !== week) return;
+        renderMarkdown(box, md);
+        card.hidden = false;
+      });
+    }).catch((e) => console.warn(e));
   }
 
   // ---------- one week ----------

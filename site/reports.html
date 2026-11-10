@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Weekly reports · Honeypot · Estul Lachin</title>
 <meta name="description" content="Weekly threat reports from a Cowrie SSH/Telnet honeypot: what changed, what was new, and which MITRE ATT&amp;CK techniques the bots used. No IP addresses are published.">
 <meta property="og:title" content="Weekly honeypot reports · Estul Lachin">
@@ -56,7 +58,7 @@
       <div class="stat"><span class="num" data-k="commands_run">–</span><span class="label">Commands run</span><span class="delta" data-k="commands_run"></span></div>
     </div>
 
-    <section class="card notes" aria-labelledby="notes-h">
+    <section class="card notes" aria-labelledby="notes-h" hidden>
       <h2 id="notes-h">Analyst notes</h2>
       <div id="notes"></div>
     </section>

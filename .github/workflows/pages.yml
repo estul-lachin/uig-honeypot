@@ -33,6 +33,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+      # reports.html only asks for the notes of weeks listed here.
+      - name: Index the analyst notes
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, re
+          notes = pathlib.Path("site/notes")
+          weeks = sorted(f.stem for f in notes.glob("*.md") if re.fullmatch(r"\d{4}-W\d{2}", f.stem))
+          (notes / "index.json").write_text(json.dumps({"weeks": weeks}) + "\n")
+          print(weeks)
+          PY
       # The page reads its data from the uig-honeypot-data repo, so only site/ is published.
       - uses: actions/upload-pages-artifact@v5
         with:
