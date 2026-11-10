@@ -74,7 +74,7 @@ cmd_status() {
 cmd_fetch() {
     local f
     mkdir -p "$ROOT/site/data"
-    for f in stats.json recent.json; do
+    for f in stats.json recent.json network.json; do
         remote "cat $APP/data/$f" >"$ROOT/site/data/$f.tmp"
         python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$ROOT/site/data/$f.tmp" \
             || die "fetched $f is not valid JSON"
