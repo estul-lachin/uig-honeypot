@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/suricata-update --suricata-conf /etc/suricata/uig-suricata.yaml -q
+ExecStart=/usr/bin/suricata-update --suricata-conf /etc/suricata/uig-suricata.yaml --disable-conf /etc/suricata/disable.conf -q
 # Restart, not reload: a live reload builds the new detection engine next to the old one, which
 # roughly doubles memory (535 MB -> ~1 GB with full ET Open) and would hit the 700 MB cap.
 ExecStartPost=/bin/systemctl restart suricata

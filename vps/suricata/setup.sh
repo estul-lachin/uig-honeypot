@@ -38,10 +38,18 @@ home="[$eth0/32${cowrie:+,$cowrie}]"
 say "HOME_NET has $(echo "$home" | tr -cd ',' | wc -c | awk '{print $1 + 1}') entries"
 python3 "$HERE/make-config.py" /etc/suricata/suricata.yaml /etc/suricata/uig-suricata.yaml "$home"
 
-# 4. Rules: ET Open through suricata-update (about 6 MB; slow from here, a few minutes).
+# 4. Rules: ET Open through suricata-update (about 6 MB; slow from here, a few minutes), minus the
+#    rules in disable.conf. Later runs rebuild from the cached download (--offline), so a change to
+#    disable.conf applies right away without fetching anything.
+install -m 644 "$HERE/disable.conf" /etc/suricata/disable.conf
+update=(suricata-update --suricata-conf /etc/suricata/uig-suricata.yaml
+        --disable-conf /etc/suricata/disable.conf --no-test --no-reload -q)
 if [ ! -s /var/lib/suricata/rules/suricata.rules ]; then
     say "Downloading ET Open rules (takes a few minutes)"
-    suricata-update --suricata-conf /etc/suricata/uig-suricata.yaml --no-test --no-reload -q
+    "${update[@]}"
+else
+    say "Rebuilding the rules from the cached download"
+    "${update[@]}" --offline
 fi
 say "Testing the config and rules"
 # (no -q here: for suricata, -q means "NFQUEUE", not "quiet")
@@ -60,7 +68,8 @@ Nice=5
 EOF
 install -m 644 "$HERE/uig-suricata-update.service" "$HERE/uig-suricata-update.timer" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now suricata
+systemctl enable suricata
+systemctl restart suricata  # picks up a changed config or rule set on a re-run
 systemctl enable --now uig-suricata-update.timer
 
 say "Started. Give it a minute, then: ./hp nsm"

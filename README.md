@@ -105,7 +105,12 @@ passive IDS: it never blocks, it only alerts. `./hp nsm-setup` (idempotent) does
   plus 5-minute engine counters in `stats.json`, the "low" detection profile and small memcaps;
 - runs the package's unit with that config, capped at 700 MB of memory and restarted on failure, so a
   spike restarts Suricata instead of the OOM killer picking Cowrie;
-- updates the ET Open rules daily (`uig-suricata-update.timer`).
+- updates the ET Open rules daily (`uig-suricata-update.timer`), minus the few in `disable.conf`.
+
+Tuning (`vps/suricata/disable.conf`) only turns off rules that fire on the VPS's own traffic: its TLS
+to Aliyun, its own `apt-get`, and Cowrie's fake BusyBox banner going back out. Everything an outside
+host sends stays on, however noisy, because that is what a honeypot is for. The first 24 hours: 692
+alerts, 0 packets dropped, 530 MB peak memory; the tuning removes 158 of those alerts, all outbound.
 
 Captures happen before Docker's NAT, so alerts carry the real source address; like the Cowrie logs, they
 stay on the VPS. `./hp nsm [HOURS]` prints memory, packet drops, alert volume and the top signatures,
