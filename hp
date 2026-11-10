@@ -162,7 +162,7 @@ First-time setup, in order:
 Day to day:
   status       containers, timer, current totals
   logs         follow the raw Cowrie log (private: never paste it anywhere public)
-  fetch        download stats.json and recent.json into site/data/ for a local preview
+  fetch        download stats.json, recent.json and network.json into site/data/ (local preview)
   pull         copy the raw Cowrie logs into logs/ (private, git-ignored) for the local Splunk
 
 Network security monitoring (Suricata, passive, alerts stay on the VPS):
