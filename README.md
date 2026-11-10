@@ -10,7 +10,9 @@ links get published.
 VPS (Debian 13)
 ├─ real sshd on a high port, key-only
 ├─ Docker: Cowrie on 22/23, read-only, no capabilities, no outbound connections
-├─ every 10 minutes: sentinel.py → new events to Microsoft Sentinel (Logs Ingestion API, write-only identity)
+├─ Suricata on eth0: passive IDS, alerts only (vps/suricata/)
+├─ every 10 minutes: sentinel.py → new Cowrie events and Suricata alerts to Microsoft Sentinel
+│                    (Logs Ingestion API, write-only identity)
 └─ hourly systemd timer
      enrich.py    → AbuseIPDB lookups of new source IPs (check only, never reports; cache stays private)
      aggregate.py → stats.json + recent.json (GeoIP: country/city/coords, never IPs)
@@ -86,7 +88,15 @@ The raw events also go to a Log Analytics workspace with Microsoft Sentinel (Can
 run (it follows the daily rotation by inode), and posts gzip batches to the Azure Monitor Logs Ingestion
 API. A data collection rule turns Cowrie's `timestamp` into `TimeGenerated` and writes the `Cowrie_CL`
 table. The VPS's service principal has only *Monitoring Metrics Publisher* on that one rule: it can add
-rows and nothing else. Its settings (`HP_AZ_*`) go from `.env.local` to `/opt/uig-honeypot/.env` (mode 600).
+rows and nothing else.
+
+Suricata alerts use the same rule and identity: `azure/suricata.sh` (run on the Mac with the Azure CLI,
+idempotent) creates the `Suricata_CL` table and adds a second stream to the rule, so no new role is
+needed. `uig-sentinel-suricata.timer` runs `sentinel.py --source suricata` every 10 minutes. It sends
+`alert` events only (never flows or protocol logs), flattened to one row each: addresses and ports,
+signature, category, severity, ET's signature severity, CVE and the rule's ATT&CK IDs, with the timestamp in UTC. logrotate copies
+and truncates `eve.json` in place, so the shipper keeps a hash of the file's first bytes and finishes
+the rotated copy (`eve.json.1.gz`) when they change. Its settings (`HP_AZ_*`) go from `.env.local` to `/opt/uig-honeypot/.env` (mode 600).
 
 The analytics rules come from [uig-detections](https://github.com/estul-lachin/uig-detections): the same
 Sigma rules as detections.uig.me, converted to KQL, checked in Sentinel against test events and deployed

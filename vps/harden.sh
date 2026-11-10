@@ -122,7 +122,7 @@ install() {
     docker compose version >/dev/null 2>&1 || compose=(docker-compose)
     say "Starting Cowrie"
     "${compose[@]}" up -d --remove-orphans
-    systemctl enable --now uig-aggregate.timer uig-geoip.timer uig-sentinel.timer
+    systemctl enable --now uig-aggregate.timer uig-geoip.timer uig-sentinel.timer uig-sentinel-suricata.timer
     [ -s data/geoip/dbip-city-lite.mmdb ] || { say "Downloading GeoIP database"; systemctl start uig-geoip.service; }
     systemctl start uig-aggregate.service || true
     "${compose[@]}" ps

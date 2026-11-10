@@ -1,0 +1,12 @@
+[Unit]
+Description=Ship new Suricata alerts to Microsoft Sentinel
+After=network-online.target suricata.service
+
+[Service]
+Type=oneshot
+UMask=0077
+EnvironmentFile=-/opt/uig-honeypot/.env
+WorkingDirectory=/opt/uig-honeypot
+ExecStart=/usr/bin/python3 /opt/uig-honeypot/sentinel.py --source suricata --logs /var/log/suricata --state data/sentinel/suricata.json
+Nice=10
+TimeoutStartSec=15min

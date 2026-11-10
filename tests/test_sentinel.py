@@ -1,4 +1,4 @@
-"""Tests for vps/sentinel.py. Run: python3 -m unittest discover -s tests
+"""Tests for vps/sentinel.py (Cowrie and Suricata sources). Run: python3 -m unittest discover -s tests
 
 No network: a fake opener stands in for Entra ID and the ingestion endpoint.
 IPs are from the RFC 5737 documentation ranges.
@@ -148,6 +148,72 @@ class SentinelTest(unittest.TestCase):
             os.environ.pop(k, None)
         self.assertEqual(sentinel.main(["--logs", self.logs, "--state", self.state + ".x"]), 0)
         self.assertFalse(os.path.exists(self.state + ".x"))
+
+
+
+def alert(i, **kw):
+    return json.dumps({"timestamp": f"2026-11-10T14:00:{i:02d}.123456+0800", "flow_id": 1234567890123456,
+                       "event_type": "alert", "src_ip": "203.0.113.9", "src_port": 51000,
+                       "dest_ip": "192.0.2.10", "dest_port": 23, "proto": "TCP", "in_iface": "eth0",
+                       "alert": {"action": "allowed", "signature_id": 2000000 + i, "rev": 2,
+                                 "signature": f"TEST signature {i}", "category": "Misc Attack",
+                                 "severity": 2, "metadata": {"mitre_technique_id": ["T1110", "T1078"],
+                                                             "mitre_tactic_id": ["TA0006"],
+                                                             "signature_severity": ["Major"],
+                                                             "cve": ["CVE_2026_0001"]}}, **kw})
+
+
+class SuricataTest(SentinelTest):
+    def run_once(self, fake):
+        client = sentinel.Client(ENV, opener=fake, stream="Custom-SuricataRaw")
+        return sentinel.run(self.logs, self.state, client, NOW, "suricata")
+
+    def sids(self, fake):
+        return [r["signature_id"] for batch in fake.posts for r in batch]
+
+    # The Cowrie-specific cases inherited from SentinelTest do not apply here.
+    test_shapes_rows_for_the_table = test_only_new_complete_lines = test_follows_rotation = None
+    test_first_run_backfills_recent_rotated_logs_only = test_batches_stay_under_the_limit = None
+    test_retries_throttling_then_succeeds = test_auth_failure_keeps_offset = None
+
+    def test_flattens_alerts_in_utc(self):
+        self.write("eve.json", [alert(1)])
+        fake = FakeAzure()
+        self.run_once(fake)
+        row = fake.posts[0][0]
+        self.assertEqual(row["timestamp"], "2026-11-10T06:00:01.123456Z")
+        self.assertEqual((row["signature_id"], row["severity"], row["category"]), (2000001, 2, "Misc Attack"))
+        self.assertEqual((row["mitre_technique"], row["mitre_tactic"]), ("T1110,T1078", "TA0006"))
+        self.assertEqual((row["signature_severity"], row["cve"]), ("Major", "CVE_2026_0001"))
+        self.assertNotIn("in_iface", row)
+        self.assertNotIn("action", row)
+
+    def test_skips_everything_but_alerts(self):
+        flow = json.dumps({"timestamp": "2026-11-10T14:00:00.000000+0800", "event_type": "flow"})
+        self.write("eve.json", [flow, alert(1), "not json", alert(2, timestamp="garbage")])
+        fake = FakeAzure()
+        self.assertEqual(self.run_once(fake), 1)
+        self.assertEqual(self.sids(fake), [2000001])
+
+    def test_follows_copytruncate_rotation(self):
+        self.write("eve.json", [alert(1)])
+        fake = FakeAzure()
+        self.run_once(fake)
+        self.write("eve.json", [alert(2)], mode="a")      # written before rotation, not sent yet
+        with open(self.path("eve.json"), "rb") as fh, gzip.open(self.path("eve.json.1.gz"), "wb") as gz:
+            gz.write(fh.read())                           # logrotate: copy, compress ...
+        open(self.path("eve.json"), "w").close()          # ... and truncate in place
+        self.write("eve.json", [alert(3)], mode="a")
+        self.run_once(fake)
+        self.assertEqual(self.sids(fake), [2000001, 2000002, 2000003])
+        self.assertEqual(self.run_once(fake), 0)
+
+    def test_first_run_ignores_numbered_rotations(self):
+        self.write("eve.json.1", [alert(1)])
+        self.write("eve.json", [alert(2)])
+        fake = FakeAzure()
+        self.run_once(fake)
+        self.assertEqual(self.sids(fake), [2000002])
 
 
 if __name__ == "__main__":
