@@ -2,7 +2,8 @@
 
 A [Cowrie](https://github.com/cowrie/cowrie) SSH/Telnet honeypot on a small VPS, with a public page at
 **https://honeypot.uig.me** that replays the last hour of attacks on a world map, plus
-[weekly reports](https://honeypot.uig.me/reports.html) mapped to MITRE ATT&CK. The raw logs stay private
+[weekly reports](https://honeypot.uig.me/reports.html) mapped to MITRE ATT&CK and a
+[network view](https://honeypot.uig.me/network.html) of the Suricata IDS alerts. The raw logs stay private
 (on the VPS, and in a local Splunk for detection work). Only aggregated stats with no IPs and no live
 links get published.
 
@@ -20,6 +21,8 @@ VPS (Debian 13)
      detect.py    → detections.json: where the detections.uig.me Sigma rules fired in the last 30 days,
                     on Cowrie's logs and Suricata's alerts (rules from detections.uig.me/rules.json, run
                     by a copy of its evaluator, sigma_eval.py)
+     network.py   → network.json: Suricata alerts of the last 30 days (ports, signatures, CVEs,
+                    countries, overlap with Cowrie), counts only
      publish.sh   → force-push one commit to the uig-honeypot-data repo (deploy key, that repo only)
 GitHub
 ├─ uig-honeypot-data: the JSON files, replaced hourly
@@ -125,7 +128,14 @@ alerts, 0 packets dropped, 530 MB peak memory; the tuning removes 158 of those a
 
 Captures happen before Docker's NAT, so alerts carry the real source address; like the Cowrie logs, they
 stay on the VPS. `./hp nsm [HOURS]` prints memory, packet drops, alert volume and the top signatures,
-with no addresses. To turn it off: `systemctl disable --now suricata uig-suricata-update.timer`.
+with no addresses.
+
+The public [network view](https://honeypot.uig.me/network.html) reads `network.json`, written hourly by
+`vps/network.py`: alerts on incoming traffic over the last 30 days by day, port, category, signature, CVE
+and source country, plus how many of the flagged sources ever opened a Cowrie session (most never do: they
+scan database, RDP and web ports). Sources are counted, never listed. An alert is inbound when its source is
+not a local address; outbound alerts are only counted. The real sshd's port (`HP_SSH_PORT`, passed as
+`--hide-port`) is left out of the port list. To turn it off: `systemctl disable --now suricata uig-suricata-update.timer`.
 
 ## Local SIEM (Splunk)
 
@@ -159,6 +169,8 @@ headless-Chrome command as in [uig-home](https://github.com/estul-lachin/uig-hom
   control characters are stripped, and strings are capped at 120 characters. Malware is listed by
   SHA-256 only and is never published as a file. See `tests/test_aggregate.py`. detections.json
   holds only counts, days and one example command per rule, cleaned the same way (`tests/test_detect.py`).
+  network.json holds only counts, ports, ET rule names and countries; it never lists the real sshd's
+  port (`tests/test_network.py`).
 - **The VPS can't touch this repo.** Its deploy key writes only to the data repo, so a compromised
   VPS could at worst publish bad numbers, not change the page's code.
 - **Never log in to port 22 with a real password.** Cowrie accepts it, and the password would

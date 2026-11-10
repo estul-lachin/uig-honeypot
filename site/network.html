@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network · Honeypot · Estul Lachin</title>
+<meta name="description" content="What a Suricata IDS sees on the honeypot's VPS: alerts, targeted ports, signatures and CVEs from the last 30 days, and how much of it never reached the SSH/Telnet honeypot. No IP addresses are published.">
+<meta property="og:title" content="Honeypot network view · Estul Lachin">
+<meta property="og:description" content="Suricata IDS alerts on a honeypot VPS: ports, signatures, CVEs. Counts only, no IPs.">
+<meta property="og:url" content="https://honeypot.uig.me/network.html">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://honeypot.uig.me/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Estul Lachin: live SSH/Telnet honeypot">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script defer src="network.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="https://uig.me/">Estul Lachin</a>
+    <nav>
+      <a href="https://lab.uig.me/">Labs</a>
+      <a href="https://lab.uig.me/timeline/">Timeline</a>
+      <a href="./" aria-current="page">Honeypot</a>
+      <a href="https://detections.uig.me/">Detections</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="subnav"><a href="./">Live map</a> · <a href="reports.html">Weekly reports</a> · <span aria-current="page">Network</span></p>
+  <section class="intro">
+    <h1>Network view</h1>
+    <p class="lead">Cowrie only sees what reaches its SSH and Telnet ports. <a href="https://suricata.io/">Suricata</a>
+      watches every packet that reaches the VPS, as a passive IDS with the ET Open rules: it never blocks, it only
+      alerts. This page counts the alerts on incoming traffic over the last <span id="days">30</span> days.
+      Sources are only counted, never listed, and no IP addresses are published.</p>
+  </section>
+  <p class="meta" id="status" aria-live="polite">Loading…</p>
+
+  <div id="view" hidden>
+    <div class="stats">
+      <div class="stat"><span class="num" data-k="alerts">–</span><span class="label">Alerts</span></div>
+      <div class="stat"><span class="num" data-k="sources">–</span><span class="label">Sources</span></div>
+      <div class="stat"><span class="num" data-k="signatures">–</span><span class="label">Signatures</span></div>
+      <div class="stat"><span class="num" data-k="high">–</span><span class="label">High severity</span></div>
+    </div>
+
+    <section class="card overlap" id="overlap-card" hidden aria-labelledby="overlap-h">
+      <h2 id="overlap-h">Beyond the honeypot</h2>
+      <p id="overlap-text"></p>
+      <div class="split" id="overlap-bar" role="img"></div>
+      <div class="legend" id="overlap-legend"></div>
+      <p class="meta">A source counts once. "Also in Cowrie": it opened at least one SSH or Telnet session in the
+        same days. Detections that join both sensors by source are on
+        <a href="https://detections.uig.me/">detections.uig.me</a>.</p>
+    </section>
+
+    <section aria-labelledby="daily-h">
+      <h2 id="daily-h">Alerts per day (UTC)</h2>
+      <div class="card"><div class="hours days" id="per-day" role="img"></div>
+        <p class="meta" id="per-day-note"></p></div>
+    </section>
+
+    <div class="tables">
+      <section class="card"><h3>Ports targeted</h3>
+        <p class="meta">Sources whose traffic to each port raised an alert. Only 22 and 23 are open (Cowrie).</p>
+        <table id="t-ports"></table></section>
+      <section class="card"><h3>Alert categories</h3><table id="t-cats"></table></section>
+      <section class="card wide"><h3>Top signatures</h3>
+        <p class="meta">ET Open rule names, by alerts. Severity 1 is high, 3 is low.</p>
+        <table id="t-sigs" class="sigs"></table></section>
+      <section class="card"><h3>CVEs in alerts</h3>
+        <p class="meta">From the rules' metadata: an exploit attempt, not a vulnerable host.</p>
+        <table id="t-cves"></table></section>
+      <section class="card"><h3>Countries</h3>
+        <p class="meta">Sources by country (DB-IP).</p>
+        <table id="t-countries"></table></section>
+      <section class="card" id="ttp-card" hidden><h3>ATT&amp;CK techniques</h3>
+        <p class="meta">From the rules' metadata, by sources.</p>
+        <table id="t-ttps"></table></section>
+    </div>
+
+    <section class="about" aria-labelledby="about-h">
+      <h2 id="about-h">About the sensor</h2>
+      <p id="engine"></p>
+      <p>Rules that only fire on the VPS's own traffic (its updates, its TLS to the cloud provider, Cowrie's replies)
+        are turned off in <a href="https://github.com/estul-lachin/uig-honeypot/blob/main/vps/suricata/disable.conf">disable.conf</a>;
+        everything an outside host sends stays on, however noisy. Alerts on outgoing traffic are counted but not
+        shown<span id="outbound"></span>. The same alerts go to Microsoft Sentinel. Set-up:
+        <a href="https://github.com/estul-lachin/uig-honeypot/tree/main/vps/suricata">vps/suricata</a>.</p>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <a href="https://www.linkedin.com/in/estul-lachin">LinkedIn</a> ·
+    <a href="https://github.com/estul-lachin">GitHub</a> ·
+    <a href="https://github.com/estul-lachin/uig-honeypot">Source</a>
+    <p class="credit"><a href="https://db-ip.com">IP Geolocation by DB-IP</a> (CC BY 4.0) ·
+      Rules: <a href="https://rules.emergingthreats.net/">ET Open</a> ·
+      <a href="https://attack.mitre.org/">MITRE ATT&amp;CK®</a> · <span id="generated"></span></p>
+  </div>
+</footer>
+</body>
+</html>

@@ -36,6 +36,7 @@ cmd_deploy() {
     {
         echo "COWRIE_IMAGE=$COWRIE_IMAGE"
         echo "HP_PUBLIC_IP=${HP_PUBLIC_IP:-}"
+        echo "HP_SSH_PORT=$HP_SSH_PORT"
         echo "HP_FAKE_HOSTNAME=${HP_FAKE_HOSTNAME:-db-backup-01}"
         [ -z "${HP_DATA_REPO:-}" ] || echo "HP_DATA_REPO=git@github.com:$HP_DATA_REPO.git"
         [ -z "${HP_ABUSEIPDB_KEY:-}" ] || echo "HP_ABUSEIPDB_KEY=$HP_ABUSEIPDB_KEY"

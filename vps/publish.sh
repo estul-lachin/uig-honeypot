@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push stats.json, recent.json and detections.json to the public data repo (HP_DATA_REPO) as a
+# Push stats.json, recent.json, detections.json and network.json to the public data repo (HP_DATA_REPO) as a
 # single orphan commit, force-pushed, so the repo never grows. The deploy key
 # on this VPS can write only to that data repo, never to the code repo.
 # Run after every aggregation by uig-aggregate.service.
@@ -27,6 +27,8 @@ git init -q -b main
 cp "$APP/data/stats.json" "$APP/data/recent.json" .
 # Rule hits for detections.uig.me (see detect.py); skipped if that run failed.
 [ ! -f "$APP/data/detections.json" ] || cp "$APP/data/detections.json" .
+# Suricata alert summary (see network.py); skipped if that run failed.
+[ ! -f "$APP/data/network.json" ] || cp "$APP/data/network.json" .
 # Weekly reports (see weekly.py): small, written once per finished week.
 if [ -d "$APP/data/reports" ]; then
     mkdir reports
@@ -40,6 +42,7 @@ https://github.com/estul-lachin/uig-honeypot, read by https://honeypot.uig.me.
 Replaced every hour by a single force-pushed commit. No IP addresses.
 reports/ holds one file per finished ISO week (UTC) and an index.json.
 detections.json counts where the https://detections.uig.me rules fired in the last 30 days.
+network.json summarizes the Suricata IDS alerts of the last 30 days (counts only).
 IP geolocation by DB-IP (https://db-ip.com), CC BY 4.0.
 EOF
 git add -A

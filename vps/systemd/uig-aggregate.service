@@ -23,6 +23,11 @@ ExecStartPost=-/usr/bin/python3 /opt/uig-honeypot/detect.py \
   --logs data/var/log/cowrie --suricata-logs /var/log/suricata \
   --out data/detections.json --rules-cache data/state/detections-rules.json \
   "--redact=${HP_PUBLIC_IP}" "--exclude-ip=${HP_PUBLIC_IP}"
+# Suricata's alerts as network.json, with no IPs; the real sshd's port is left out (see network.py).
+ExecStartPost=-/usr/bin/python3 /opt/uig-honeypot/network.py \
+  --suricata-logs /var/log/suricata --cowrie-logs data/var/log/cowrie --out data/network.json \
+  --geoip data/geoip/dbip-city-lite.mmdb "--redact=${HP_PUBLIC_IP}" "--exclude-ip=${HP_PUBLIC_IP}" \
+  "--hide-port=${HP_SSH_PORT}"
 # Publishing is best effort: a GitHub outage must not fail the stats run.
 ExecStartPost=-/opt/uig-honeypot/publish.sh
 Nice=10

@@ -198,6 +198,20 @@ table.ttps td.b { width: 22%; }
 .tables.inner { gap: 24px; margin-top: 8px; }
 h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
 
+/* network view */
+.overlap { margin-top: 24px; }
+.overlap h2 { margin: 0 0 8px; }
+.overlap p { max-width: 720px; }
+.split { display: flex; gap: 2px; height: 14px; margin: 12px 0 8px; }
+.split span { display: block; min-width: 2px; border-radius: 3px; }
+.split .only, .sw.only { background: var(--event); }
+.split .both, .sw.both { background: var(--bar); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.overlap .legend { margin: 0 0 8px; }
+.hours.days { height: 180px; }
+.hours i.hi { background: var(--event); }
+#view > .tables { margin-top: 24px; }
+
 @media (max-width: 640px) {
   .tables { grid-template-columns: minmax(0, 1fr); }
   .hours { gap: 1px; }
