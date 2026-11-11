@@ -104,7 +104,7 @@ the rotated copy (`eve.json.1.gz`) when they change. Its settings (`HP_AZ_*`) go
 
 The analytics rules come from [uig-detections](https://github.com/estul-lachin/uig-detections): the same
 Sigma rules as detections.uig.me, converted to KQL, checked in Sentinel against test events and deployed
-as scheduled rules that raise incidents grouped by source IP. The workspace has a 0.1 GB daily cap and the
+as scheduled rules whose alerts become one incident per source IP. The workspace has a 0.1 GB daily cap and the
 subscription a CAD 5 monthly budget alert; the honeypot sends a few MB a day. SOAR playbooks in
 uig-detections (`soar/`) enrich, triage and escalate the incidents.
 
