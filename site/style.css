@@ -22,6 +22,8 @@
   --radius: 2px;
   --font: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --mono: var(--font);
+  /* long-form prose (articles, READMEs) reads faster in a proportional face */
+  --prose: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   /* dataviz: validated with the dataviz skill against --surface. Map ramp is one hue, dim -> bright. */
   --land: #16241b;          /* no sessions */
   --seq-1: #14532f;         /* 1-9 */
@@ -225,6 +227,9 @@ td.none { color: var(--muted); }
 
 .subnav { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
 .subnav [aria-current="page"] { color: var(--accent); font-weight: 600; text-shadow: var(--glow); }
+
+/* long-form prose in a proportional face; headings, data and code stay mono */
+.notes p, .notes li { font-family: var(--prose); font-size: 16px; line-height: 1.7; }
 
 /* weekly reports */
 .week-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 24px 0 0; }
