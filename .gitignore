@@ -8,3 +8,4 @@ logs/
 siem/app/honeypot/local/
 siem/app/honeypot/lookups/honeypot_seen_urls.csv
 siem/app/honeypot/lookups/ip_reputation.csv
+logs-demo/

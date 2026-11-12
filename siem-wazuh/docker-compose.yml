@@ -1,0 +1,81 @@
+# Local Wazuh for the honeypot's pseudonymized copy (logs-demo/). Mac only, never on the VPS (RAM).
+# Started by ./hp wazuh up; ./hp wazuh load replays logs-demo/ into it. Dashboard:
+# https://127.0.0.1:8444 (admin / Lab-Wazuh-2026: localhost only, and the data holds no real addresses).
+name: uig-honeypot-wazuh
+
+x-certs: &certs
+  certs:
+    condition: service_completed_successfully
+
+services:
+  certs:
+    image: alpine:3.20
+    command: sh /opt/certs.sh
+    volumes:
+      - certs:/certs
+      - ./config/certs.sh:/opt/certs.sh:ro
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:4.14.9
+    hostname: wazuh.indexer
+    depends_on: *certs
+    environment:
+      OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - certs:/usr/share/wazuh-indexer/config/certs:ro
+      - indexer-data:/var/lib/wazuh-indexer
+      - ./config/indexer.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro
+      - ./config/internal_users.yml:/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk -u admin:Lab-Wazuh-2026 https://localhost:9200/_cluster/health | grep -q '\"status\":\"\\(green\\|yellow\\)\"'"]
+      interval: 10s
+      retries: 60
+      start_period: 30s
+  wazuh.manager:
+    image: wazuh/wazuh-manager:4.14.9
+    hostname: wazuh.manager
+    depends_on:
+      <<: *certs
+      wazuh.indexer: { condition: service_healthy }
+    environment:
+      INDEXER_URL: https://wazuh.indexer:9200
+      INDEXER_USERNAME: admin
+      INDEXER_PASSWORD: Lab-Wazuh-2026
+      FILEBEAT_SSL_VERIFICATION_MODE: full
+      SSL_CERTIFICATE_AUTHORITIES: /certs/root-ca.pem
+      SSL_CERTIFICATE: /certs/wazuh.manager.pem
+      SSL_KEY: /certs/wazuh.manager-key.pem
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: MyS3cr37P450r.*-
+    volumes:
+      - certs:/certs:ro
+      - ../logs-demo:/opt/honeypot-demo:ro
+      - ./inject.py:/opt/hp/inject.py:ro
+      - ./config/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      - ./config/local_rules.xml:/wazuh-config-mount/etc/rules/local_rules.xml:ro
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.14.9
+    hostname: wazuh.dashboard
+    depends_on:
+      <<: *certs
+      wazuh.indexer: { condition: service_healthy }
+    environment:
+      INDEXER_USERNAME: admin
+      INDEXER_PASSWORD: Lab-Wazuh-2026
+      WAZUH_API_URL: https://wazuh.manager
+      DASHBOARD_USERNAME: kibanaserver
+      DASHBOARD_PASSWORD: Lab-Kibana-2026
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: MyS3cr37P450r.*-
+    ports:
+      - "127.0.0.1:8444:5601"
+    volumes:
+      - certs:/usr/share/wazuh-dashboard/certs:ro
+      - ./config/dashboard.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro
+      - ./config/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+
+volumes:
+  certs:
+  indexer-data:

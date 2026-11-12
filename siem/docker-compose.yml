@@ -19,6 +19,8 @@ services:
       - "127.0.0.1:8010:8000"
     volumes:
       - ../logs:/opt/honeypot-logs:ro
+      # pseudonymized copy (./hp demo): index honeypot_demo, safe for recordings
+      - ../logs-demo:/opt/honeypot-demo:ro
       # read-write so settings saved in the UI land in app/honeypot/local (git-ignored)
       - ./app/honeypot:/opt/splunk/etc/apps/honeypot
       - splunk-var:/opt/splunk/var

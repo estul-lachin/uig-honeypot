@@ -1,0 +1,16 @@
+# Indexer users (bcrypt hashes), localhost only, pseudonymized data:
+# admin / Lab-Wazuh-2026 (you, also the dashboard login), kibanaserver / Lab-Kibana-2026 (the dashboard's own login).
+_meta:
+  type: "internalusers"
+  config_version: 2
+
+admin:
+  hash: "$2y$12$pt4hSZBeI/3uKc.92xb64ee.hIlSL5HRAVhYo8n.JLGC.z1x7WkPS"
+  reserved: true
+  backend_roles: ["admin"]
+  description: "Administrator"
+
+kibanaserver:
+  hash: "$2y$12$BB4HRtSn/agjhWHJvhI0WONvAW12bUvxNC72.yjTzDZspQ4qOOkiK"
+  reserved: true
+  description: "Dashboard service account"

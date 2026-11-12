@@ -108,6 +108,24 @@ cmd_pull() {
         mv "$dir/abuseipdb.json.tmp" "$dir/abuseipdb.json"
         python3 "$ROOT/siem/gen_splunk.py" --reputation "$dir/abuseipdb.json"
     fi
+    # Suricata alerts only (eve.json also holds flows), oldest file first, filtered on the VPS
+    remote 'cd /var/log/suricata 2>/dev/null || exit 0
+        for f in $(ls -1tr eve.json* 2>/dev/null); do
+            case $f in *.gz) zcat "$f" ;; *) cat "$f" ;; esac
+        done | grep -F "\"event_type\":\"alert\"" | gzip -c' </dev/null | gunzip >"$dir/suricata-alerts.json.tmp"
+    mv "$dir/suricata-alerts.json.tmp" "$dir/suricata-alerts.json"
+    say "Suricata alerts: $(wc -l <"$dir/suricata-alerts.json" | tr -d ' ') line(s)"
+    cmd_demo
+}
+
+# Pseudonymized copy of logs/ for recordings and guide.uig.me (siem/pseudo.py). Same rule as the
+# workspace functions HP_Cowrie / HP_Suricata (azure/demo-functions.sh), so all three SIEMs agree.
+cmd_demo() {
+    if [ -z "${HP_PSEUDO_SALT:-}" ]; then
+        say "No HP_PSEUDO_SALT in .env.local: skipping the demo copy (logs-demo/)"
+        return 0
+    fi
+    HP_PSEUDO_SALT=$HP_PSEUDO_SALT HP_SSH_PORT=$HP_SSH_PORT python3 "$ROOT/siem/pseudo.py"
 }
 
 # Local Splunk with the honeypot app (siem/). Needs HP_SPLUNK_PASSWORD in .env.local.
@@ -116,7 +134,8 @@ cmd_siem() {
     case "${1:-}" in
         up)
             : "${HP_SPLUNK_PASSWORD:?set HP_SPLUNK_PASSWORD in .env.local (8+ characters)}"
-            mkdir -p "$ROOT/logs"
+            mkdir -p "$ROOT/logs" "$ROOT/logs-demo"
+            chmod 700 "$ROOT/logs-demo"
             python3 "$ROOT/siem/gen_splunk.py"
             # first-seen state for HP-02; written by Splunk, never committed
             local seen=$ROOT/siem/app/honeypot/lookups/honeypot_seen_urls.csv
@@ -134,6 +153,52 @@ cmd_siem() {
         down)  SPLUNK_PASSWORD=x "${compose[@]}" down ;;
         reset) SPLUNK_PASSWORD=x "${compose[@]}" down -v ;;
         *) die "usage: ./hp siem up | reload | down | reset (reset deletes the index)" ;;
+    esac
+}
+
+# Local Wazuh on the pseudonymized copy (siem-wazuh/). Events are replayed into the manager's analysis
+# queue (inject.py) instead of read by logcollector, so a reload is exact: same rows as logs-demo/.
+WZ_AUTH=admin:Lab-Wazuh-2026
+cmd_wazuh() {
+    local compose=(docker compose -f "$ROOT/siem-wazuh/docker-compose.yml")
+    idx() { "${compose[@]}" exec -T wazuh.indexer curl -sk -u "$WZ_AUTH" "$@"; }
+    case "${1:-}" in
+        up)
+            mkdir -p "$ROOT/logs-demo"
+            chmod 700 "$ROOT/logs-demo"
+            "${compose[@]}" up -d
+            say "Wazuh starts in 2-3 minutes: https://127.0.0.1:8444 (admin / Lab-Wazuh-2026), then ./hp wazuh load"
+            ;;
+        load)
+            local f n want=0 got=-1 prev=-2 tries=0
+            "${compose[@]}" exec -T wazuh.manager test -S /var/ossec/queue/sockets/queue \
+                || die "the manager is not ready yet (./hp wazuh up, wait 2-3 minutes)"
+            "$ROOT/siem-wazuh/pipeline.sh"
+            say "Deleting old alerts"
+            idx -X DELETE "https://localhost:9200/wazuh-alerts-4.x-*" -o /dev/null
+            for f in "$ROOT"/logs-demo/cowrie-*.json "$ROOT"/logs-demo/suricata-*.json; do
+                [ -f "$f" ] || continue
+                n=$("${compose[@]}" exec -T wazuh.manager /var/ossec/framework/python/bin/python3 -I \
+                    /opt/hp/inject.py "honeypot-$(basename "$f" | cut -d- -f1)" <"$f")
+                want=$((want + n))
+                echo "  $(basename "$f"): $n"
+            done
+            say "Replayed $want events; waiting for the indexer"
+            while [ "$got" != "$want" ] && [ $tries -lt 60 ]; do
+                sleep 5
+                idx -X POST "https://localhost:9200/wazuh-alerts-4.x-*/_refresh" -o /dev/null
+                prev=$got
+                got=$(idx "https://localhost:9200/wazuh-alerts-4.x-*/_count?q=rule.groups:honeypot" \
+                    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("count", 0))')
+                if [ "$got" = "$prev" ]; then tries=$((tries + 6)); else tries=$((tries + 1)); fi
+            done
+            [ "$got" = "$want" ] || die "indexed $got of $want events (see: ./hp wazuh logs)"
+            say "Indexed $got alerts"
+            ;;
+        logs)  "${compose[@]}" exec -T wazuh.manager tail -n 50 /var/ossec/logs/ossec.log ;;
+        down)  "${compose[@]}" down ;;
+        reset) "${compose[@]}" down -v ;;
+        *) die "usage: ./hp wazuh up | load | logs | down | reset (reset deletes the alerts)" ;;
     esac
 }
 
@@ -163,7 +228,9 @@ Day to day:
   status       containers, timer, current totals
   logs         follow the raw Cowrie log (private: never paste it anywhere public)
   fetch        download stats.json, recent.json and network.json into site/data/ (local preview)
-  pull         copy the raw Cowrie logs into logs/ (private, git-ignored) for the local Splunk
+  pull         copy the raw Cowrie logs and Suricata alerts into logs/ (private, git-ignored)
+               for the local Splunk, then run demo
+  demo         rebuild logs-demo/, the pseudonymized copy (needs HP_PSEUDO_SALT in .env.local)
 
 Network security monitoring (Suricata, passive, alerts stay on the VPS):
   nsm-setup    add swap, install Suricata and the daily rule update, start it (idempotent)
@@ -174,13 +241,20 @@ Local Splunk (siem/, needs HP_SPLUNK_PASSWORD in .env.local):
   siem reload  regenerate the ATT&CK macro and restart Splunk after app changes
   siem down    stop it (the index is kept)
   siem reset   stop it and delete the index
+
+Local Wazuh on the pseudonymized copy (siem-wazuh/, https://127.0.0.1:8444):
+  wazuh up     start manager, indexer and dashboard
+  wazuh load   replay logs-demo/ (all days) into it; deletes the previous alerts first
+  wazuh logs   the manager's last log lines
+  wazuh down   stop it (alerts are kept)   wazuh reset   stop it and delete the alerts
   ssh          shell on the VPS
 EOF
 }
 
 case "${1:-help}" in
-    prepare|finalize|deploy|status|fetch|pull|logs|ssh|help) "cmd_${1}" ;;
+    prepare|finalize|deploy|status|fetch|pull|demo|logs|ssh|help) "cmd_${1}" ;;
     siem) cmd_siem "${2:-}" ;;
+    wazuh) cmd_wazuh "${2:-}" ;;
     build-image) cmd_build_image ;;
     nsm-setup) cmd_nsm_setup ;;
     nsm) cmd_nsm "${2:-24}" ;;

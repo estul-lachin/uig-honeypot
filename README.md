@@ -28,8 +28,9 @@ GitHub
 ├─ uig-honeypot-data: the JSON files, replaced hourly
 └─ uig-honeypot Pages: site/ (static; reads the JSON from the data repo; notes/ holds weekly notes)
 Mac
-├─ ./hp: setup, deploy, status, fetch (local preview), pull (raw logs → logs/, private)
-└─ siem/: local Splunk with the honeypot app: ATT&CK macro, IP reputation lookup, 7 detections, dashboard
+├─ ./hp: setup, deploy, status, fetch (local preview), pull (raw logs → logs/, private), demo
+├─ siem/: local Splunk with the honeypot app: ATT&CK macro, IP reputation lookup, 7 detections, dashboard
+└─ siem-wazuh/: local Wazuh on the pseudonymized copy (logs-demo/), for guide.uig.me
 ```
 
 ## Setup
@@ -151,6 +152,30 @@ macro and `ttp_rules` lookup (both generated from `vps/ttp_rules.json` by `siem/
 seven scheduled detections and the *Honeypot overview* dashboard. The detections are described, with SPL
 and false positives, in [docs/detections.md](docs/detections.md). Splunk runs as a 60-day Enterprise
 trial; after that the Free license still searches but doesn't run scheduled alerts.
+
+## Pseudonymized copy: Splunk, Sentinel and Wazuh on the same rows
+
+[guide.uig.me](https://guide.uig.me) shows the same investigations in three SIEMs, and recordings of
+them, without a single real address. `./hp pull` also fetches the Suricata alerts and then runs
+`./hp demo`, which writes `logs-demo/` (git-ignored) with `siem/pseudo.py`:
+
+- rows shaped exactly like `Cowrie_CL` and `Suricata_CL` (the shaping code of `vps/sentinel.py`)
+- a public `src_ip`/`dest_ip` becomes `src-` + 8 hex of sha256(`HP_PSEUDO_SALT` + ip); any other IPv4 in
+  a string becomes `[ip]`; Suricata alerts on the real sshd port are dropped
+
+The workspace functions `HP_Cowrie` and `HP_Suricata` (`azure/demo-functions.sh`) apply the same rule in
+KQL; checked row for row against the copy. Splunk indexes the copy as `index=honeypot_demo`.
+
+```
+./hp wazuh up      # https://127.0.0.1:8444, admin / Lab-Wazuh-2026 (localhost only, pseudonymized data)
+./hp wazuh load    # replay logs-demo/ into the manager (deletes the previous alerts first)
+./hp wazuh down    # stop; ./hp wazuh reset also deletes the alerts
+```
+
+`load` sends each line into the manager's analysis queue (`siem-wazuh/inject.py`), so the alert count
+equals the row count. `siem-wazuh/config/local_rules.xml` (100100-100202) turns every event into an
+alert, with ATT&CK IDs on logins, downloads and persistence. `siem-wazuh/pipeline.sh` makes an alert keep
+its event time (Wazuh would stamp the replay time), cut to milliseconds, Wazuh's own precision.
 
 ## Link preview
 
