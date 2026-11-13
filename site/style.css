@@ -121,7 +121,8 @@ main.wrap { padding-top: 32px; }
 .map-card h2 { margin: 0; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
 
-.controls { display: flex; gap: 8px; align-items: center; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls[hidden] { display: none; }
 .controls button {
   font: inherit; font-size: 14px; color: var(--text); background: var(--chip); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 4px 12px; cursor: pointer; min-height: 32px;
@@ -136,6 +137,7 @@ main.wrap { padding-top: 32px; }
 
 .progress { height: 3px; background: var(--chip); border-radius: 2px; margin: 12px 0; overflow: hidden; }
 .progress span { display: block; height: 100%; width: 0; background: var(--accent); }
+.progress.live span { background: var(--event); opacity: 0.6; }
 
 .map-wrap { position: relative; }
 #map { display: block; width: 100%; height: auto; }

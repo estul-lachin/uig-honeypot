@@ -1,7 +1,7 @@
 # uig-honeypot
 
 A [Cowrie](https://github.com/cowrie/cowrie) SSH/Telnet honeypot on a small VPS, with a public page at
-**https://honeypot.uig.me** that replays the last hour of attacks on a world map, plus
+**https://honeypot.uig.me** that shows attacks live on a world map (a few minutes behind) or replays the last hour, plus
 [weekly reports](https://honeypot.uig.me/reports.html) mapped to MITRE ATT&CK and a
 [network view](https://honeypot.uig.me/network.html) of the Suricata IDS alerts. The raw logs stay private
 (on the VPS, and in a local Splunk for detection work). Only aggregated stats with no IPs and no live
@@ -12,6 +12,7 @@ VPS (Debian 13)
 ├─ real sshd on a high port, key-only
 ├─ Docker: Cowrie on 22/23, read-only, no capabilities, no outbound connections
 ├─ Suricata on eth0: passive IDS, alerts only (vps/suricata/)
+├─ every minute: aggregate.py --recent-only → recent.json (last hour of events), publish.sh
 ├─ every 10 minutes: sentinel.py → new Cowrie events and Suricata alerts to Microsoft Sentinel
 │                    (Logs Ingestion API, write-only identity)
 └─ hourly systemd timer
@@ -25,7 +26,7 @@ VPS (Debian 13)
                     countries, overlap with Cowrie), counts only
      publish.sh   → force-push one commit to the uig-honeypot-data repo (deploy key, that repo only)
 GitHub
-├─ uig-honeypot-data: the JSON files, replaced hourly
+├─ uig-honeypot-data: the JSON files, replaced every minute (recent.json) and hourly (the rest)
 └─ uig-honeypot Pages: site/ (static; reads the JSON from the data repo; notes/ holds weekly notes)
 Mac
 ├─ ./hp: setup, deploy, status, fetch (local preview), pull (raw logs → logs/, private), demo

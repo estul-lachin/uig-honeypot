@@ -134,6 +134,21 @@ class AggregateTest(unittest.TestCase):
         self.assertNotIn("198.51.100", raw)
         self.assertNotIn("src_ip", raw)
 
+    def test_recent_only_matches_full_run(self):
+        _, _, full = self.run_geo()
+        recent = os.path.join(self.tmp.name, "live.json")
+        a = argparse.Namespace(logs=self.logs, state=self.state, out=None, recent_out=recent,
+                               redact=[HONEYPOT_IP], exclude_ip=["198.51.100.99"], recent_only=True)
+        os.remove(self.out)
+        aggregate.run(a, aggregate.Geo(reader=FakeReader()), NOW)
+        with open(recent) as fh:
+            self.assertEqual(json.load(fh), full)
+        self.assertFalse(os.path.exists(self.out))  # no stats written
+
+    def test_recent_only_needs_recent_out(self):
+        with self.assertRaises(SystemExit):
+            aggregate.main(["--logs", self.logs, "--state", self.state, "--recent-only"])
+
     def test_recent_spans_midnight_rotation(self):
         self.write("cowrie.json.2026-11-01", DAY1 + [
             ev("cowrie.session.connect", "2026-11-02T02:59:00.000Z", src_ip="198.51.100.8", protocol="telnet")])

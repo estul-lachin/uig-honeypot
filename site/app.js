@@ -22,10 +22,20 @@
   const fmt = new Intl.NumberFormat("en");
   const $ = (id) => document.getElementById(id);
 
-  const getJSON = (url) => fetch(url, { cache: "no-cache" }).then((r) => {
+  const getJSON = (url, init) => fetch(url, Object.assign({ cache: "no-cache" }, init)).then((r) => {
     if (!r.ok) throw new Error(url + ": " + r.status);
     return r.json();
   });
+
+  // recent.json changes every minute. raw.githubusercontent.com caches files for about five minutes;
+  // the contents API serves the pushed file within a minute (60 requests/hour per visitor, so the page
+  // polls once a minute and falls back to the raw file when the limit is hit).
+  const RECENT_API = "https://api.github.com/repos/estul-lachin/uig-honeypot-data/contents/recent.json";
+  function getRecent() {
+    if (params.get("data")) return getJSON(DATA + "recent.json");
+    return getJSON(RECENT_API, { headers: { Accept: "application/vnd.github.raw+json" } })
+      .catch(() => getJSON(DATA + "recent.json"));
+  }
 
   function countryLabel(cc) {
     if (!cc || cc === "??") return "Unknown";
@@ -284,60 +294,162 @@
     while (feed.children.length > FEED_MAX) feed.lastElementChild.remove();
   }
 
-  // ---------- replay ----------
-  function startReplay(r) {
-    const events = r.events || [];
-    const span = Math.max(1, r.to - r.from);
-    let speed = 10, playing = !reduceMotion, head = r.from, next = 0, last = null;
-    const clock = $("clock"), bar = $("progress"), playBtn = $("play");
+  // ---------- live + replay ----------
+  // The VPS republishes recent.json (the last hour of events) every minute. Live mode polls it and plays
+  // new events in real time, LIVE_DELAY seconds behind the clock so each minute's batch has arrived
+  // before its events are due. Replay mode plays the newest hour on a loop, faster than real time.
+  const LIVE_POLL = 60 * 1000;
+  const STALE = 15 * 60; // seconds: older data means the VPS stopped publishing
+  const keyOf = (e) => [e.t, e.kind, e.text || e.proto || "", e.lat, e.lon].join("|");
 
-    function label() {
-      clock.textContent = events.length
-        ? `Replaying ${hhmmss(head)} UTC · ${fmt.format(events.length)} events in the hour ending ${hhmmss(r.to)} UTC`
-        : `No events in the hour ending ${hhmmss(r.to)} UTC.`;
-      bar.style.width = (100 * (head - r.from) / span).toFixed(2) + "%";
+  function startPlayer(first) {
+    let latest = first;                  // newest recent.json
+    let events = (first.events || []).slice();
+    let seen = new Set(events.map(keyOf));
+    let liveDelay = 150;                 // seconds behind real time, grows if the data arrives later
+    let mode = "live", speed = 10, playing = !reduceMotion;
+    let lastFired = -Infinity;           // live: newest event already shown
+    let rep = null;                      // replay: { events, from, to, head, next }
+    let last = null;
+    const clock = $("clock"), bar = $("progress"), playBtn = $("play"), title = $("map-h");
+    const replayCtl = $("replay-controls");
+
+    const nowSec = () => Date.now() / 1000;
+    const age = () => nowSec() - latest.to;
+
+    function adaptDelay() {
+      // Data that is a minute or two old on arrival is normal; leave 30 s of slack on top.
+      if (age() < STALE) liveDelay = Math.min(600, Math.max(liveDelay, Math.ceil(age()) + 30));
     }
 
-    if (!events.length) {
-      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Quiet hour: nothing to replay.";
+    function merge(r) {
+      if (!r || !Array.isArray(r.events) || r.to <= latest.to) return;
+      latest = r;
+      const from = r.to - 3600;
+      for (const e of r.events) {
+        const k = keyOf(e);
+        if (!seen.has(k)) { seen.add(k); events.push(e); }
+      }
+      events = events.filter((e) => e.t >= from).sort((x, y) => x.t - y.t);
+      seen = new Set(events.map(keyOf));
+      adaptDelay();
+    }
+
+    function clearMap() { gEvents.selectAll("*").interrupt().remove(); }
+
+    function quiet(text) {
+      const li = document.createElement("li"); li.className = "empty"; li.textContent = text;
       $("feed").replaceChildren(li);
-      label();
-      return;
     }
 
-    if (reduceMotion) {
-      // No animation: show where the hour's sessions came from and the newest events.
-      events.forEach((e) => { if (e.kind === "connect" && e.lat != null) {
+    function show(e, animate) {
+      if (animate && !reduceMotion) fireOnMap(e);
+      else if (e.kind === "connect" && e.lat != null && reduceMotion) {
         const [x, y] = projection([e.lon, e.lat]);
         gEvents.append("circle").attr("class", "src").attr("cx", x).attr("cy", y).attr("r", 3.5);
-      } });
-      events.slice(-FEED_MAX).forEach(pushFeed);
-      head = r.to;
-      playBtn.textContent = "Play";
-      playBtn.setAttribute("aria-pressed", "false");
+      }
+      pushFeed(e);
     }
 
-    // Start just before the first event so the page never opens on a long silence.
-    if (!reduceMotion) head = Math.max(r.from, events[0].t - 2);
+    // ----- live -----
+    function enterLive() {
+      mode = "live";
+      clearMap();
+      const head = nowSec() - liveDelay;
+      const past = events.filter((e) => e.t <= head);
+      lastFired = past.length ? past[past.length - 1].t : head;
+      if (past.length) {
+        $("feed").replaceChildren();
+        past.slice(-FEED_MAX).forEach((e) => show(e, false));
+      } else quiet("Waiting for the next session…");
+    }
+
+    function tickLive(now) {
+      const head = nowSec() - liveDelay;
+      // After a background tab (no frames), list what was missed without a burst of arcs.
+      const resumed = last !== null && now - last > 2000;
+      for (const e of events) {
+        if (e.t > lastFired && e.t <= head) {
+          $("feed").querySelector(".empty")?.remove();
+          show(e, !resumed);
+          lastFired = e.t;
+        }
+      }
+      const behind = Math.round(liveDelay / 60);
+      if (age() > STALE) {
+        clock.textContent = `Live feed paused: the newest data is ${Math.round(age() / 60)} min old.`;
+      } else {
+        clock.textContent = `Live, about ${behind} min behind · ${hhmmss(head)} UTC`;
+      }
+      bar.style.width = "100%";
+    }
+
+    // ----- replay -----
+    function enterReplay() {
+      mode = "replay";
+      clearMap();
+      const evs = events.filter((e) => e.t >= latest.to - 3600);
+      rep = { events: evs, from: latest.to - 3600, to: latest.to, head: latest.to, next: evs.length };
+      if (!evs.length) { quiet("Quiet hour: nothing to replay."); return; }
+      $("feed").replaceChildren();
+      if (reduceMotion && !playing) {
+        // No animation: show where the hour's sessions came from and the newest events.
+        evs.forEach((e) => { if (e.kind === "connect") show(e, false); });
+        $("feed").replaceChildren();
+        evs.slice(-FEED_MAX).forEach(pushFeed);
+      } else {
+        // Start just before the first event so the replay never opens on a long silence.
+        rep.head = Math.max(rep.from, evs[0].t - 2);
+        rep.next = 0;
+      }
+    }
+
+    function tickReplay(now) {
+      const r = rep, span = Math.max(1, r.to - r.from);
+      if (last !== null && playing && r.events.length) {
+        r.head += ((now - last) / 1000) * speed;
+        // Skip quiet stretches: never more than MAX_GAP real seconds of nothing.
+        if (r.next < r.events.length && r.events[r.next].t - r.head > MAX_GAP * speed) r.head = r.events[r.next].t - speed;
+        while (r.next < r.events.length && r.events[r.next].t <= r.head) show(r.events[r.next++], true);
+        if (r.head >= r.to) { enterReplay(); return; } // loop, picking up the newest hour
+      }
+      clock.textContent = r.events.length
+        ? `Replaying ${hhmmss(r.head)} UTC · ${fmt.format(r.events.length)} events in the hour ending ${hhmmss(r.to)} UTC`
+        : `No events in the hour ending ${hhmmss(r.to)} UTC.`;
+      bar.style.width = (100 * (r.head - r.from) / span).toFixed(2) + "%";
+    }
 
     function tick(now) {
-      if (last !== null && playing) {
-        head += ((now - last) / 1000) * speed;
-        // Skip quiet stretches: never more than MAX_GAP real seconds of nothing.
-        if (next < events.length && events[next].t - head > MAX_GAP * speed) head = events[next].t - speed;
-        while (next < events.length && events[next].t <= head) {
-          const e = events[next++];
-          fireOnMap(e);
-          pushFeed(e);
-        }
-        if (head >= r.to) { head = Math.max(r.from, events[0].t - 2); next = 0; }
-      }
+      if (mode === "live") tickLive(now); else tickReplay(now);
       last = now;
-      label();
       requestAnimationFrame(tick);
     }
+
+    function setMode(m) {
+      document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.mode === m)));
+      replayCtl.hidden = m !== "replay";
+      title.textContent = m === "live" ? "Live attack map" : "Last hour, replayed";
+      bar.parentElement.classList.toggle("live", m === "live");
+      if (m === "live") enterLive(); else enterReplay();
+    }
+
+    adaptDelay();
+    if (age() > STALE) {
+      // The VPS has not published for a while: replaying the last hour we have is more useful.
+      setMode("replay");
+    } else setMode("live");
+    playBtn.textContent = playing ? "Pause" : "Play";
+    playBtn.setAttribute("aria-pressed", String(playing));
     requestAnimationFrame(tick);
 
+    setInterval(() => {
+      if (document.hidden) return;
+      getRecent().then(merge).catch((err) => console.warn(err));
+    }, LIVE_POLL);
+
+    document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.mode !== mode) setMode(b.dataset.mode);
+    }));
     playBtn.addEventListener("click", () => {
       playing = !playing;
       playBtn.textContent = playing ? "Pause" : "Play";
@@ -350,14 +462,14 @@
   }
 
   // ---------- boot ----------
-  Promise.all([getJSON(DATA + "stats.json"), getJSON(DATA + "recent.json"),
+  Promise.all([getJSON(DATA + "stats.json"), getRecent(),
     getJSON("countries-50m.json"), getJSON("iso-a2-to-n3.json")])
     .then(([stats, recent, world, iso]) => {
       renderStats(stats);
       renderTables(stats);
       renderDaily(stats);
       renderMap(world, iso, stats);
-      startReplay(recent);
+      startPlayer(recent);
       let w = innerWidth;
       addEventListener("resize", () => { if (innerWidth !== w) { w = innerWidth; renderDaily(stats); } });
     })

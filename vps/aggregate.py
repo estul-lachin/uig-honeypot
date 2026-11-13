@@ -7,7 +7,9 @@ addresses and URLs inside strings are defanged. With --geoip, sources are
 reduced to country, city and coordinates rounded to GEO_DIGITS decimals.
 
 recent.json holds the last RECENT_WINDOW seconds of events, for the
-replayed attack map.
+attack map. With --recent-only, only recent.json is written: a cheap run
+(the live log and, just after midnight, the newest rotated one) that
+uig-live.timer repeats every minute so the map can follow along.
 
 Rotated logs (cowrie.json.YYYY-MM-DD) are complete, so each one is parsed
 once into a small partial file under --state. The live cowrie.json is
@@ -345,7 +347,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--logs", required=True, help="Cowrie log directory")
     ap.add_argument("--state", required=True, help="directory for cached partials")
-    ap.add_argument("--out", required=True, help="stats.json to write")
+    ap.add_argument("--out", help="stats.json to write (required unless --recent-only)")
     ap.add_argument("--redact", action="append", default=[],
                     help="string to replace with [honeypot-ip] (repeatable)")
     ap.add_argument("--exclude-ip", action="append", default=[],
@@ -354,20 +356,34 @@ def main(argv=None):
     ap.add_argument("--recent-out", help="recent.json to write (optional)")
     ap.add_argument("--reports", help="directory for weekly reports (optional, see weekly.py)")
     ap.add_argument("--reputation", help="enrich.py's AbuseIPDB cache (optional)")
+    ap.add_argument("--recent-only", action="store_true",
+                    help="write only --recent-out (no stats, partials or reports)")
     a = ap.parse_args(argv)
+    if a.recent_only and not a.recent_out:
+        ap.error("--recent-only needs --recent-out")
+    if not a.recent_only and not a.out:
+        ap.error("--out is required")
     return run(a, Geo(a.geoip), datetime.datetime.now(datetime.timezone.utc))
 
 
 def run(a, geo, now):
     redact = [r for r in a.redact if r]
     exclude = set(a.exclude_ip)
-    os.makedirs(a.state, exist_ok=True)
     since = now.timestamp() - RECENT_WINDOW
     recent = [] if a.recent_out else None
-
-    all_days = collections.defaultdict(new_day)
     rotated = [p for p in sorted(glob.glob(os.path.join(a.logs, "cowrie.json.*")))
                if not p.endswith(".tmp")]
+    live = os.path.join(a.logs, "cowrie.json")
+    if getattr(a, "recent_only", False):
+        if rotated and os.path.getmtime(rotated[-1]) >= since:
+            parse(rotated[-1], redact, exclude, geo, since, recent)
+        if os.path.exists(live):
+            parse(live, redact, exclude, geo, since, recent)
+        write_recent(a.recent_out, recent, since, now)
+        return 0
+    os.makedirs(a.state, exist_ok=True)
+
+    all_days = collections.defaultdict(new_day)
     for path in rotated:
         part = os.path.join(a.state, os.path.basename(path) + PARTIAL_SUFFIX)
         if not os.path.exists(part):
@@ -379,7 +395,6 @@ def run(a, geo, now):
     # file and the live one; rescan the rotated one for events only.
     if recent is not None and rotated and os.path.getmtime(rotated[-1]) >= since:
         parse(rotated[-1], redact, exclude, geo, since, recent)
-    live = os.path.join(a.logs, "cowrie.json")
     if os.path.exists(live):
         merge(all_days, parse(live, redact, exclude, geo, since, recent))
 
@@ -389,13 +404,17 @@ def run(a, geo, now):
         import weekly  # imports this module, so not at the top
         weekly.write_reports(all_days, a.reports, now, rep)
     if recent is not None:
-        recent.sort(key=lambda e: e["t"])
-        atomic_write(a.recent_out, {
-            "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "from": round(since), "to": round(now.timestamp()),
-            "events": recent[-RECENT_MAX:],
-        })
+        write_recent(a.recent_out, recent, since, now)
     return 0
+
+
+def write_recent(path, recent, since, now):
+    recent.sort(key=lambda e: e["t"])
+    atomic_write(path, {
+        "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "from": round(since), "to": round(now.timestamp()),
+        "events": recent[-RECENT_MAX:],
+    })
 
 
 if __name__ == "__main__":

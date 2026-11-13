@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self'; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self'; connect-src 'self' https://raw.githubusercontent.com https://api.github.com; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Honeypot · Estul Lachin</title>
 <meta name="description" content="Live statistics from a Cowrie SSH/Telnet honeypot: who scans the internet, which passwords they try and what they run. No IP addresses are published.">
 <meta property="og:title" content="Honeypot · Estul Lachin">
-<meta property="og:description" content="Real SSH/Telnet attack traffic from a Cowrie honeypot, replayed on a world map.">
+<meta property="og:description" content="Real SSH/Telnet attack traffic from a Cowrie honeypot, live on a world map.">
 <meta property="og:url" content="https://honeypot.uig.me/">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://honeypot.uig.me/og-image.png">
@@ -44,8 +44,8 @@
     <h1>Honeypot</h1>
     <p class="lead">A <a href="https://github.com/cowrie/cowrie">Cowrie</a> SSH and Telnet honeypot on a small VPS in
       South China. Every session below is real, unsolicited traffic from the internet: bots guessing passwords and
-      running their first commands on what they think is a server. Stats update hourly; the map replays the last
-      hour. No IP addresses are published.</p>
+      running their first commands on what they think is a server. The map follows new sessions live, a
+      few minutes behind; the stats update hourly. No IP addresses are published.</p>
   </section>
 
   <div class="stats" id="stats" aria-live="polite">
@@ -60,15 +60,21 @@
   <section class="card map-card" aria-labelledby="map-h">
     <div class="card-head">
       <div>
-        <h2 id="map-h">Last hour, replayed</h2>
+        <h2 id="map-h">Live attack map</h2>
         <p class="meta" id="clock">Loading…</p>
       </div>
-      <div class="controls" role="group" aria-label="Replay controls">
-        <button type="button" id="play" aria-pressed="true">Pause</button>
-        <span class="seg" role="radiogroup" aria-label="Replay speed">
-          <button type="button" data-speed="1" role="radio" aria-checked="false">1×</button>
-          <button type="button" data-speed="10" role="radio" aria-checked="true">10×</button>
-          <button type="button" data-speed="60" role="radio" aria-checked="false">60×</button>
+      <div class="controls">
+        <span class="seg" role="radiogroup" aria-label="Map mode">
+          <button type="button" data-mode="live" role="radio" aria-checked="true">Live</button>
+          <button type="button" data-mode="replay" role="radio" aria-checked="false">Replay last hour</button>
+        </span>
+        <span class="controls" id="replay-controls" role="group" aria-label="Replay controls" hidden>
+          <button type="button" id="play" aria-pressed="true">Pause</button>
+          <span class="seg" role="radiogroup" aria-label="Replay speed">
+            <button type="button" data-speed="1" role="radio" aria-checked="false">1×</button>
+            <button type="button" data-speed="10" role="radio" aria-checked="true">10×</button>
+            <button type="button" data-speed="60" role="radio" aria-checked="false">60×</button>
+          </span>
         </span>
       </div>
     </div>
@@ -83,7 +89,7 @@
     <div class="legend">
       <span class="legend-title">Sessions by country</span>
       <span class="bins" id="bins"></span>
-      <span class="key"><span class="dot-src"></span>New session (replay)</span>
+      <span class="key"><span class="dot-src"></span>New session</span>
       <span class="key"><span class="dot-target"></span>Honeypot</span>
     </div>
     <h3 class="feed-h">Event feed</h3>
@@ -120,8 +126,8 @@
   <section class="about">
     <h2>How it works</h2>
     <p>Cowrie listens on ports 22 and 23 and pretends to be a Linux server. It runs in a locked-down container that
-      cannot open outbound connections, so attackers can't use it against anyone else. Every hour a script turns the
-      raw logs into the aggregated JSON this page reads: IP addresses are reduced to country, city and coordinates
+      cannot open outbound connections, so attackers can't use it against anyone else. Every minute a script publishes
+      the last hour of events, and every hour the aggregated stats, as the JSON this page reads: IP addresses are reduced to country, city and coordinates
       rounded to about 10 km; URLs and IPs inside commands are defanged (<code>hxxp[:]//</code>). The raw logs stay
       on the server. Setup, hardening and the aggregation code are in the
       <a href="https://github.com/estul-lachin/uig-honeypot">source repository</a>.</p>

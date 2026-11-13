@@ -1,0 +1,17 @@
+[Unit]
+Description=Publish the honeypot's last hour of events for the live map
+After=network-online.target
+
+[Service]
+Type=oneshot
+UMask=0022
+EnvironmentFile=-/opt/uig-honeypot/.env
+WorkingDirectory=/opt/uig-honeypot
+# Only recent.json: the live log is parsed, stats and partials are left to uig-aggregate.
+ExecStart=/usr/bin/python3 /opt/uig-honeypot/aggregate.py --recent-only \
+  --logs data/var/log/cowrie --recent-out data/recent.json \
+  --geoip data/geoip/dbip-city-lite.mmdb "--redact=${HP_PUBLIC_IP}"
+# Best effort, like the hourly run: a GitHub hiccup just skips this minute.
+ExecStartPost=-/opt/uig-honeypot/publish.sh --quiet
+Nice=10
+TimeoutStartSec=50s

@@ -67,7 +67,7 @@ cmd_publish_setup() {
 
 cmd_status() {
     remote "cd $APP && { docker compose ps 2>/dev/null || docker-compose ps; } \
-        && systemctl --no-pager list-timers uig-aggregate.timer \
+        && systemctl --no-pager list-timers uig-aggregate.timer uig-live.timer \
         && python3 -c 'import json; s=json.load(open(\"data/stats.json\")); print(\"generated\", s[\"generated_at\"]); print(json.dumps(s[\"totals\"], indent=1))'"
 }
 
