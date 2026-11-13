@@ -57,6 +57,42 @@
     <mitre><id>T1105</id></mitre>
   </rule>
 
+  <!-- The download was blocked (the honeypot has no egress), but the attempt is still T1105. -->
+  <rule id="100112" level="5">
+    <if_sid>100100</if_sid>
+    <field name="eventid">^cowrie.session.file_download.failed$</field>
+    <description>Cowrie: download attempt by $(src_ip) failed</description>
+    <mitre><id>T1105</id></mitre>
+  </rule>
+
+  <!-- Tool transfer typed as a command: the T1105 regexes of vps/ttp_rules.json (downloaders,
+       /dev/tcp, or a binary written in hex echo chunks). Persistence (100110, 100111) is checked first. -->
+  <rule id="100105" level="8">
+    <if_sid>100103</if_sid>
+    <field name="input" type="pcre2">\b(wget|curl|tftp|ftpget|scp)\b|/dev/tcp/|echo\s+-[a-z]*e[a-z]*\s+["']?(\\x[0-9a-fA-F]{2}){4}</field>
+    <description>Cowrie: tool download command from $(src_ip)</description>
+    <mitre><id>T1105</id></mitre>
+  </rule>
+
+  <!-- The same line also makes the file executable or runs it: a dropper. -->
+  <rule id="100106" level="10">
+    <if_sid>100105</if_sid>
+    <field name="input" type="pcre2">\bchmod\b|[;&|]\s*(ba)?sh\s+\S|[;&|]\s*\./\S</field>
+    <description>Cowrie: download and execute in one command from $(src_ip)</description>
+    <mitre><id>T1105</id><id>T1059.004</id></mitre>
+  </rule>
+
+  <!-- Login then tool transfer (command or Cowrie download event) in the same session (Splunk HP-01). Keyed on the Cowrie session, not
+       the IP: ./hp wazuh load replays days of events in seconds, so a time window keyed on the IP
+       would pair a login and a download that were days apart. -->
+  <rule id="100120" level="12" timeframe="300">
+    <if_sid>100104, 100105, 100106, 100112</if_sid>
+    <if_matched_sid>100101</if_matched_sid>
+    <same_field>session</same_field>
+    <description>Cowrie: $(src_ip) logged in and fetched a tool in the same session</description>
+    <mitre><id>T1078</id><id>T1105</id></mitre>
+  </rule>
+
 </group>
 
 <group name="honeypot,ids,suricata,">

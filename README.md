@@ -181,7 +181,13 @@ KQL; checked row for row against the copy. Splunk indexes the copy as `index=hon
 
 `load` sends each line into the manager's analysis queue (`siem-wazuh/inject.py`), so the alert count
 equals the row count. `siem-wazuh/config/local_rules.xml` (100100-100202) turns every event into an
-alert, with ATT&CK IDs on logins, downloads and persistence. `siem-wazuh/pipeline.sh` makes an alert keep
+alert, with ATT&CK IDs on logins, downloads and persistence. Download commands (100105), download and
+execute in one line (100106) and failed downloads (100112) are T1105, and 100120 (level 12) is a login
+followed by a tool transfer in the same Cowrie session, keyed on the session because the replay squeezes
+days into minutes (Splunk's HP-01). The image copies the mounted rules only on its first start, so `load`
+copies `local_rules.xml` in and restarts the manager when it changed. Test rules with
+`docker compose -f siem-wazuh/docker-compose.yml exec -T wazuh.manager /var/ossec/bin/wazuh-logtest < lines.json`.
+`siem-wazuh/pipeline.sh` makes an alert keep
 its event time (Wazuh would stamp the replay time), cut to milliseconds, Wazuh's own precision.
 
 ## Link preview

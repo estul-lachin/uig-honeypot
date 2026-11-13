@@ -173,6 +173,22 @@ cmd_wazuh() {
             local f n want=0 got=-1 prev=-2 tries=0
             "${compose[@]}" exec -T wazuh.manager test -S /var/ossec/queue/sockets/queue \
                 || die "the manager is not ready yet (./hp wazuh up, wait 2-3 minutes)"
+            # The image copies the mounted rules only on the first start, so a restart keeps the old
+            # ones. Copy them in and restart when they changed.
+            # shellcheck disable=SC2016  # expands inside the container
+            if ! "${compose[@]}" exec -T wazuh.manager sh -c '[ "$(md5sum </wazuh-config-mount/etc/rules/local_rules.xml)" \
+                    = "$(md5sum </var/ossec/etc/rules/local_rules.xml)" ]'; then
+                say "local_rules.xml changed; restarting the manager"
+                "${compose[@]}" exec -T wazuh.manager sh -c 'cp /wazuh-config-mount/etc/rules/local_rules.xml \
+                    /var/ossec/etc/rules/local_rules.xml && chown wazuh:wazuh /var/ossec/etc/rules/local_rules.xml \
+                    && /var/ossec/bin/wazuh-analysisd -t && /var/ossec/bin/wazuh-control restart' >/dev/null 2>&1 \
+                    || die "the new rules don't load (./hp wazuh logs)"
+                tries=0
+                until "${compose[@]}" exec -T wazuh.manager test -S /var/ossec/queue/sockets/queue; do
+                    tries=$((tries + 1)); [ $tries -lt 30 ] || die "the manager did not come back"; sleep 2
+                done
+                tries=0
+            fi
             "$ROOT/siem-wazuh/pipeline.sh"
             say "Deleting old alerts"
             idx -X DELETE "https://localhost:9200/wazuh-alerts-4.x-*" -o /dev/null
