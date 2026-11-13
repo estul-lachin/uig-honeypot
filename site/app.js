@@ -8,6 +8,9 @@
   // ?data=data/ for a local preview (./hp fetch); otherwise the data repo.
   const DATA = params.get("data") || "https://raw.githubusercontent.com/estul-lachin/uig-honeypot-data/main/";
   const TARGET = [114.1, 22.5]; // honeypot, rounded to the region
+  // Pacific-centred, like maps printed in China: the seam runs through the Atlantic (30°W), so no
+  // continent is cut in half and arcs from the Americas cross the Pacific instead of wrapping.
+  const CENTRAL_MERIDIAN = 150;
   const BINS = [1, 10, 100, 1000]; // session thresholds for the shading
   const FEED_MAX = 8;
   const MAX_GAP = 3; // seconds of real time
@@ -166,7 +169,7 @@
   }
 
   // ---------- map ----------
-  let projection, path, gEvents;
+  let projection, path, gEvents, targetRing;
 
   function shade(n) {
     if (!n) return "var(--land)";
@@ -192,12 +195,15 @@
     for (const [a2, n3] of Object.entries(iso)) n3ToA2[n3] = a2;
     const land = topojson.feature(world, world.objects.countries);
     land.features = land.features.filter((f) => f.id !== "010"); // Antarctica
-    projection = d3.geoEqualEarth().fitWidth(952, land);
+    projection = d3.geoEqualEarth().rotate([-CENTRAL_MERIDIAN, 0]).fitWidth(952, land);
     path = d3.geoPath(projection);
     const [[, y0], [, y1]] = path.bounds(land);
     svg.attr("viewBox", `-4 ${Math.floor(y0) - 4} 960 ${Math.ceil(y1 - y0) + 8}`);
     const counts = s.countries || {};
     const tip = $("tooltip"), wrap = $("map-wrap");
+    const gBase = svg.append("g").attr("aria-hidden", "true");
+    gBase.append("path").attr("class", "sphere").attr("d", path({ type: "Sphere" }));
+    gBase.append("path").attr("class", "graticule").attr("d", path(d3.geoGraticule10()));
     svg.append("g").selectAll("path").data(land.features).join("path")
       .attr("class", "country")
       .attr("d", path)
@@ -224,6 +230,7 @@
     gEvents = svg.append("g");
     const [tx, ty] = projection(TARGET);
     const gt = svg.append("g").attr("aria-hidden", "true");
+    targetRing = gt.append("circle").attr("class", "target-ring").attr("cx", tx).attr("cy", ty).attr("r", 5);
     gt.append("circle").attr("class", "target").attr("cx", tx).attr("cy", ty).attr("r", 5);
     gt.append("text").attr("class", "target-label").attr("x", tx + 9).attr("y", ty + 4).text("honeypot");
     renderLegend();
@@ -238,12 +245,19 @@
       const len = arc.node().getTotalLength();
       arc.attr("stroke-dasharray", `${len} ${len}`).attr("stroke-dashoffset", len)
         .transition().duration(900).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0)
+        .on("end", hitTarget)
         .transition().duration(1600).style("opacity", 0).remove();
     }
     gEvents.append("circle").attr("class", "pulse").attr("cx", sx).attr("cy", sy).attr("r", 3)
       .transition().duration(1400).attr("r", 14).style("opacity", 0).remove();
     gEvents.append("circle").attr("class", "src").attr("cx", sx).attr("cy", sy).attr("r", 3.5)
       .transition().delay(1800).duration(600).style("opacity", 0).remove();
+  }
+
+  // The honeypot ring flashes when an arc lands on it.
+  function hitTarget() {
+    targetRing.interrupt().attr("r", 5).style("opacity", 1)
+      .transition().duration(900).ease(d3.easeCubicOut).attr("r", 16).style("opacity", 0);
   }
 
   const KIND = { connect: "connect", login: "login", command: "command", download: "download" };

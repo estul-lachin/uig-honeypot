@@ -94,6 +94,8 @@ h3 { font-size: 1.05rem; margin: 0 0 6px; }
   --bar: #2b9483;
   --event: #c2410c;
   --target: #1f2328;
+  --ocean: #f3f6f5;
+  --grid: #e3e8e6;
 }
 
 
@@ -137,6 +139,8 @@ main.wrap { padding-top: 32px; }
 
 .map-wrap { position: relative; }
 #map { display: block; width: 100%; height: auto; }
+#map .sphere { fill: var(--ocean); stroke: var(--border); stroke-width: 1; }
+#map .graticule { fill: none; stroke: var(--grid); stroke-width: 0.5; }
 #map .country { fill: var(--land); stroke: var(--surface); stroke-width: 0.5; }
 #map .country:hover { stroke: var(--text); stroke-width: 1; }
 #map .tiny { stroke: var(--text); stroke-width: 1; }
@@ -144,6 +148,7 @@ main.wrap { padding-top: 32px; }
 #map .src { fill: var(--event); stroke: var(--surface); stroke-width: 2; }
 #map .pulse { fill: none; stroke: var(--event); stroke-width: 1.5; }
 #map .target { fill: var(--surface); stroke: var(--target); stroke-width: 2; }
+#map .target-ring { fill: none; stroke: var(--event); stroke-width: 1.5; opacity: 0; }
 #map .target-label { fill: var(--muted); font: 12px var(--mono); }
 
 .tooltip {
