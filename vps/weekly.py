@@ -34,11 +34,7 @@ def week_bounds(week):
 def total(days):
     t = aggregate.new_day()
     for b in days:
-        for k in ("sessions", "logins", "logins_ok", "commands_run", "ssh", "telnet"):
-            t[k] += b[k]
-        t["ips"] |= b["ips"]
-        for c in aggregate.COUNTERS:
-            t[c].update(b[c])
+        aggregate.add(t, b)
     return t
 
 
@@ -91,6 +87,7 @@ def build_week(all_days, week, rep=None):
         },
         "downloads": downloads,
         "ttps": aggregate.ttp_list(t["ttps"]),
+        "ports": aggregate.port_list(t),
         "countries": [{"cc": k, "sessions": v} for k, v in t["countries"].most_common(aggregate.TOP)],
         "reputation": aggregate.reputation(t["ips"], rep or {}),
     }

@@ -184,6 +184,56 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual(got["T1059.004"], 1)   # | sh
         self.assertEqual(s["ttps"][0]["tactic"], "Credential Access")
 
+    def test_ports(self):
+        # container ports as Cowrie logs them: 2222 = host 22, 2224 = host 2222, 2323 = host 2323
+        self.write("cowrie.json.2026-11-01", DAY1 + [
+            ev("cowrie.session.connect", "2026-11-01T05:00:00.000Z", src_ip="198.51.100.7", protocol="ssh",
+               session="s1", dst_port=2224),
+            ev("cowrie.login.success", "2026-11-01T05:00:01.000Z", src_ip="198.51.100.7", session="s1",
+               username="root", password="root"),
+            ev("cowrie.login.success", "2026-11-01T05:00:02.000Z", src_ip="198.51.100.7", session="s1",
+               username="root", password="root"),
+            ev("cowrie.command.input", "2026-11-01T05:00:03.000Z", src_ip="198.51.100.7", session="s1",
+               input="uname -a"),
+            ev("cowrie.command.input", "2026-11-01T05:00:04.000Z", src_ip="198.51.100.7", session="s1",
+               input="id"),
+            ev("cowrie.session.connect", "2026-11-01T06:00:00.000Z", src_ip="198.51.100.8",
+               protocol="telnet", session="t1", dst_port=2323),
+            ev("cowrie.session.connect", "2026-11-01T06:00:01.000Z", src_ip="198.51.100.8",
+               protocol="telnet", session="t2", dst_port=2223),
+        ])
+        raw, s = self.run_agg()
+        ports = {p["port"]: p for p in s["ports"]}
+        self.assertEqual(sorted(ports), [22, 23, 2222, 2323])
+        # sessions without dst_port fall back to the protocol's standard port
+        self.assertEqual(ports[22]["sessions"], 2)
+        self.assertEqual(ports[23]["sessions"], 2)
+        self.assertEqual(ports[23]["unique_sources"], 1)
+        self.assertEqual(ports[2222], {"port": 2222, "proto": "ssh", "sessions": 1, "unique_sources": 1,
+                                       "logged_in": 1, "commands_run": 2, "first_day": "2026-11-01"})
+        self.assertEqual(ports[2323]["proto"], "telnet")
+        self.assertEqual(sum(p["sessions"] for p in s["ports"]), s["totals"]["sessions"])
+        self.assertNotIn("198.51.100", raw)
+        # the partials keep it, so it survives raw log cleanup
+        os.remove(os.path.join(self.logs, "cowrie.json.2026-11-01"))
+        _, again = self.run_agg()
+        self.assertEqual(again["ports"], s["ports"])
+
+    def test_recent_connect_has_port(self):
+        self.write("cowrie.json", LIVE + [
+            ev("cowrie.session.connect", "2026-11-02T03:10:00.000Z", src_ip="198.51.100.8", protocol="telnet",
+               dst_port=2323)])
+        _, _, r = self.run_geo()
+        self.assertEqual([e.get("port") for e in r["events"] if e["kind"] == "connect"], [22, 2323])
+
+    def test_old_partials_are_rebuilt(self):
+        os.makedirs(self.state)
+        old = os.path.join(self.state, "cowrie.json.2026-11-01.v2.partial.json")
+        with open(old, "w") as fh:
+            json.dump({"2026-11-01": {"sessions": 99}}, fh)
+        _, s = self.run_agg()
+        self.assertEqual(s["totals"]["sessions"], 3)  # the v2 file is ignored
+
     def test_empty(self):
         os.remove(os.path.join(self.logs, "cowrie.json.2026-11-01"))
         os.remove(os.path.join(self.logs, "cowrie.json"))

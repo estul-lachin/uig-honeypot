@@ -201,6 +201,14 @@ td.b i { display: block; height: 8px; margin-top: 7px; background: var(--bar); b
 table.mono td.v { font-family: var(--mono); font-size: 13px; }
 .tables .meta { margin-bottom: 8px; }
 td.none { color: var(--muted); }
+.scroll-x { overflow-x: auto; margin-top: 10px; }
+table.cols { table-layout: auto; min-width: 520px; font-variant-numeric: tabular-nums; }
+table.cols th { text-align: right; font-weight: 600; font-size: 13px; color: var(--muted); padding: 0 0 6px 12px;
+  border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.cols td { text-align: right; padding: 5px 0 5px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.cols th:nth-child(-n+2), table.cols td:nth-child(-n+2) { text-align: left; }
+table.cols th:first-child, table.cols td:first-child { padding-left: 0; font-family: var(--mono); }
+table.cols tr:last-child td { border-bottom: 0; }
 
 .about p { color: var(--muted); max-width: 720px; }
 

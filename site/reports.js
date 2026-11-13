@@ -186,6 +186,43 @@
     }).catch((e) => console.warn(e));
   }
 
+  // ---------- sessions per honeypot port ----------
+  const PORT_COLS = [["Port", "port"], ["Protocol", "proto"], ["Sessions", "sessions"],
+    ["Sources", "unique_sources"], ["Logged in", "logged_in"], ["Commands / session", "cps"], ["Since", "first_day"]];
+  function renderPorts(rows) {
+    const table = $("t-ports");
+    table.replaceChildren();
+    rows = rows || [];
+    if (!rows.length) {
+      const td = table.insertRow().insertCell();
+      td.className = "none";
+      td.textContent = "Nothing yet";
+      return;
+    }
+    const cols = PORT_COLS.filter(([, k]) => k !== "first_day" || rows.some((r) => r.first_day));
+    const head = table.createTHead().insertRow();
+    for (const [label] of cols) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      head.appendChild(th);
+    }
+    const body = table.createTBody();
+    for (const r of rows) {
+      const tr = body.insertRow();
+      for (const [, k] of cols) {
+        const td = tr.insertCell();
+        if (k === "port") td.textContent = String(r.port);
+        else if (k === "proto") td.textContent = (r.proto || "").toUpperCase();
+        else if (k === "first_day") td.textContent = r.first_day || "";
+        else if (k === "cps") td.textContent = r.sessions ? (r.commands_run / r.sessions).toFixed(1) : "0";
+        else if (k === "logged_in") {
+          td.textContent = fmt.format(r.logged_in) + (r.sessions ? " (" + Math.round(100 * r.logged_in / r.sessions) + "%)" : "");
+        } else td.textContent = fmt.format(r[k] || 0);
+      }
+    }
+  }
+
   // ---------- one week ----------
   function show(week) {
     $("status").textContent = "Loading " + week + "…";
@@ -195,6 +232,8 @@
       renderStats(w);
       renderNotes(w.week);
       fillTable("t-ttps", w.ttps, ttpCell, "sessions");
+      renderPorts(w.ports);
+      $("ports-card").hidden = !w.ports;  // reports written before per-port counts have none
       renderHours(w);
       renderReputation(w.reputation, fillTable, (n) => fmt.format(n));
       fillTable("t-new-passwords", w.new.passwords, textCell);

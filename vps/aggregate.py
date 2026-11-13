@@ -19,6 +19,10 @@ top KEEP entries, so long-tail counts are approximate.
 
 Sessions are also tagged with MITRE ATT&CK techniques from ttp_rules.json
 (next to this script); each technique counts once per session.
+
+Sessions are also counted per honeypot port (22, 2222, 23, 2323): Cowrie
+logs the container port as dst_port, and HOST_PORT maps it back to the port
+the attacker connected to (see vps/compose.yaml).
 """
 
 import argparse
@@ -34,14 +38,20 @@ KEEP = 500          # entries kept per counter in a partial
 TOP = 20            # entries published per top list
 MAX_LEN = 120       # longest string published
 COUNTERS = ("usernames", "passwords", "pairs", "commands", "clients", "downloads", "countries",
-            "ttps", "hours")
+            "ttps", "hours",
+            # per honeypot port: sessions, sessions with a successful login, commands run
+            "ports", "port_logged_in", "port_commands")
+INTS = ("sessions", "logins", "logins_ok", "commands_run", "ssh", "telnet")
 # Bump when the partial format changes: old partials are then ignored and
 # rebuilt from the raw logs that are still on disk.
-PARTIAL_SUFFIX = ".v2.partial.json"
+PARTIAL_SUFFIX = ".v3.partial.json"  # v3: per-port counters
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ttp_rules.json")
 RECENT_WINDOW = 3600  # seconds of events in recent.json
 RECENT_MAX = 2000     # cap on events in recent.json (newest kept)
 GEO_DIGITS = 1        # coordinate rounding: 0.1 degree is about 11 km
+# Cowrie's container port (dst_port) -> the host port attackers connect to; keep in sync with vps/compose.yaml.
+HOST_PORT = {2222: 22, 2224: 2222, 2223: 23, 2323: 2323}
+PORT_PROTO = {22: "ssh", 2222: "ssh", 23: "telnet", 2323: "telnet"}
 
 IPV4 = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
 URL_SCHEME = re.compile(r"\b(https?|ftp|tftp)://", re.IGNORECASE)
@@ -89,9 +99,30 @@ def tag(eid, text=None, rules=RULES):
 
 
 def new_day():
-    return {"sessions": 0, "logins": 0, "logins_ok": 0, "commands_run": 0,
-            "ssh": 0, "telnet": 0, "ips": set(),
+    return {**{k: 0 for k in INTS}, "ips": set(), "port_ips": collections.defaultdict(set),
             **{c: collections.Counter() for c in COUNTERS}}
+
+
+def add(t, b):
+    """Add day bucket b into bucket t."""
+    for k in INTS:
+        t[k] += b[k]
+    t["ips"] |= b["ips"]
+    for p, ips in b["port_ips"].items():
+        t["port_ips"][p] |= ips
+    for c in COUNTERS:
+        t[c].update(b[c])
+
+
+def host_port(ev):
+    """The host port of a cowrie.session.connect event, as a string ("22", "2323")."""
+    try:
+        port = HOST_PORT.get(int(ev.get("dst_port")))
+    except (TypeError, ValueError):
+        port = None
+    if port is None:  # no or unknown dst_port: the protocol's standard port
+        port = 23 if ev.get("protocol") == "telnet" else 22
+    return str(port)
 
 
 class Geo:
@@ -147,6 +178,7 @@ def parse(path, redact, exclude, geo=NO_GEO, since=None, recent=None):
     """
     days = collections.defaultdict(new_day)
     tagged = set()  # (day, session, technique): count each once per session
+    sess_port, logged_in = {}, set()  # session -> host port; sessions with a successful login
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
@@ -168,18 +200,26 @@ def parse(path, redact, exclude, geo=NO_GEO, since=None, recent=None):
             if eid == "cowrie.session.connect":
                 b["sessions"] += 1
                 b["ips"].add(ev.get("src_ip", ""))
+                port = sess_port[ev.get("session")] = host_port(ev)
+                b["ports"][port] += 1
+                b["port_ips"][port].add(ev.get("src_ip", ""))
                 proto = ev.get("protocol", "ssh")
                 if proto in ("ssh", "telnet"):
                     b[proto] += 1
                 b["hours"][ev["timestamp"][11:13]] += 1
                 cc = geo(ev.get("src_ip")).get("cc")
                 b["countries"][cc or "??"] += 1
-                item = {"kind": "connect", "proto": proto if proto in ("ssh", "telnet") else "ssh"}
+                item = {"kind": "connect", "proto": proto if proto in ("ssh", "telnet") else "ssh",
+                        "port": int(port)}
             elif eid in ("cowrie.login.failed", "cowrie.login.success"):
                 b["logins"] += 1
                 ok = eid == "cowrie.login.success"
                 if ok:
                     b["logins_ok"] += 1
+                    port = sess_port.get(ev.get("session"))
+                    if port and (day, ev.get("session")) not in logged_in:
+                        logged_in.add((day, ev.get("session")))
+                        b["port_logged_in"][port] += 1
                 user = clean(ev.get("username", ""), redact)
                 pw = clean(ev.get("password", ""), redact)
                 b["usernames"][user] += 1
@@ -188,6 +228,9 @@ def parse(path, redact, exclude, geo=NO_GEO, since=None, recent=None):
                 item = {"kind": "login", "ok": ok, "text": f"{user} / {pw}"}
             elif eid == "cowrie.command.input":
                 b["commands_run"] += 1
+                port = sess_port.get(ev.get("session"))
+                if port:
+                    b["port_commands"][port] += 1
                 cmd = clean(ev.get("input", ""), redact)
                 b["commands"][cmd] += 1
                 item = {"kind": "command", "text": cmd}
@@ -212,6 +255,7 @@ def to_json(days):
     for day, b in days.items():
         d = dict(b)
         d["ips"] = sorted(b["ips"])
+        d["port_ips"] = {p: sorted(ips) for p, ips in b["port_ips"].items()}
         for c in COUNTERS:
             d[c] = dict(b[c].most_common(KEEP))
         out[day] = d
@@ -222,9 +266,11 @@ def from_json(data):
     days = {}
     for day, d in data.items():
         b = new_day()
-        for k in ("sessions", "logins", "logins_ok", "commands_run", "ssh", "telnet"):
+        for k in INTS:
             b[k] = d.get(k, 0)
         b["ips"] = set(d.get("ips", []))
+        for p, ips in d.get("port_ips", {}).items():
+            b["port_ips"][p] = set(ips)
         for c in COUNTERS:
             b[c] = collections.Counter(d.get(c, {}))
         days[day] = b
@@ -233,12 +279,7 @@ def from_json(data):
 
 def merge(into, days):
     for day, b in days.items():
-        t = into[day]
-        for k in ("sessions", "logins", "logins_ok", "commands_run", "ssh", "telnet"):
-            t[k] += b[k]
-        t["ips"] |= b["ips"]
-        for c in COUNTERS:
-            t[c].update(b[c])
+        add(into[day], b)
 
 
 def atomic_write(path, data):
@@ -289,15 +330,24 @@ def reputation(ips, rep):
     }
 
 
+def port_list(t, days=None):
+    """One row per honeypot port seen in bucket t; with `days` ({day: bucket}), also its first day."""
+    rows = []
+    for p in sorted(t["ports"], key=int):
+        row = {"port": int(p), "proto": PORT_PROTO.get(int(p), ""), "sessions": t["ports"][p],
+               "unique_sources": len(t["port_ips"].get(p, ())), "logged_in": t["port_logged_in"][p],
+               "commands_run": t["port_commands"][p]}
+        if days is not None:
+            row["first_day"] = min((d for d, b in days.items() if b["ports"].get(p)), default=None)
+        rows.append(row)
+    return rows
+
+
 def build(all_days, now, rep=None):
-    ips, total = set(), new_day()
+    total = new_day()
     for b in all_days.values():
-        ips |= b["ips"]
-    for b in all_days.values():
-        for k in ("sessions", "logins", "logins_ok", "commands_run", "ssh", "telnet"):
-            total[k] += b[k]
-        for c in COUNTERS:
-            total[c].update(b[c])
+        add(total, b)
+    ips = total["ips"]
     downloads = []
     for k, v in total["downloads"].most_common(TOP):
         sha, _, url = k.partition(" ")
@@ -331,6 +381,7 @@ def build(all_days, now, rep=None):
         # every country seen ("??" = no geo data), for the map's shading
         "countries": dict(total["countries"].most_common()),
         "ttps": ttp_list(total["ttps"]),
+        "ports": port_list(total, all_days),
         # AbuseIPDB lookups by enrich.py (null until there are any)
         "reputation": reputation(ips, rep or {}),
     }

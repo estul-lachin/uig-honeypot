@@ -94,6 +94,9 @@ class WeeklyTest(unittest.TestCase):
         self.assertEqual(ttps["T1078"], 2)
         self.assertEqual(ttps["T1003.008"], 1)
         self.assertEqual(ttps["T1105"], 1)
+        # no dst_port in these sessions: counted on SSH's standard port
+        self.assertEqual(w["ports"], [{"port": 22, "proto": "ssh", "sessions": 2, "unique_sources": 2,
+                                       "logged_in": 2, "commands_run": 2}])
 
     def test_nothing_private_is_published(self):
         self.run_at(datetime.datetime(2026, 11, 16, 3, tzinfo=UTC))

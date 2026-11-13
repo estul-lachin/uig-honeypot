@@ -88,6 +88,7 @@
   function renderTables(s) {
     const countries = Object.entries(s.countries || {})
       .map(([cc, count]) => ({ cc, count })).slice(0, 20);
+    renderPorts(s.ports);
     fillTable("t-countries", countries, (td, r) => { td.textContent = countryLabel(r.cc); });
     fillTable("t-ttps", s.ttps || [], (td, r) => {
       const a = document.createElement("a");
@@ -114,6 +115,43 @@
       td.append(a, " ", r.url);
       td.title = r.url;
     });
+  }
+
+  // ---------- sessions per honeypot port ----------
+  const PORT_COLS = [["Port", "port"], ["Protocol", "proto"], ["Sessions", "sessions"],
+    ["Sources", "unique_sources"], ["Logged in", "logged_in"], ["Commands / session", "cps"], ["Since", "first_day"]];
+  function renderPorts(rows) {
+    const table = $("t-ports");
+    table.replaceChildren();
+    rows = rows || [];
+    if (!rows.length) {
+      const td = table.insertRow().insertCell();
+      td.className = "none";
+      td.textContent = "Nothing yet";
+      return;
+    }
+    const cols = PORT_COLS.filter(([, k]) => k !== "first_day" || rows.some((r) => r.first_day));
+    const head = table.createTHead().insertRow();
+    for (const [label] of cols) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = label;
+      head.appendChild(th);
+    }
+    const body = table.createTBody();
+    for (const r of rows) {
+      const tr = body.insertRow();
+      for (const [, k] of cols) {
+        const td = tr.insertCell();
+        if (k === "port") td.textContent = String(r.port);
+        else if (k === "proto") td.textContent = (r.proto || "").toUpperCase();
+        else if (k === "first_day") td.textContent = r.first_day || "";
+        else if (k === "cps") td.textContent = r.sessions ? (r.commands_run / r.sessions).toFixed(1) : "0";
+        else if (k === "logged_in") {
+          td.textContent = fmt.format(r.logged_in) + (r.sessions ? " (" + Math.round(100 * r.logged_in / r.sessions) + "%)" : "");
+        } else td.textContent = fmt.format(r[k] || 0);
+      }
+    }
   }
 
   // ---------- AbuseIPDB reputation (lookups only; no IPs in the data) ----------
@@ -281,7 +319,10 @@
     const k = document.createElement("span"); k.className = "kind";
     k.textContent = e.kind === "login" ? (e.ok ? "login ✓" : "login ✗") : (KIND[e.kind] || e.kind);
     const x = document.createElement("span"); x.className = "what";
-    x.textContent = e.kind === "connect" ? (e.proto || "").toUpperCase() : (e.text || "");
+    // the port only when it is not the protocol's standard one (2222, 2323)
+    const std = e.proto === "telnet" ? 23 : 22;
+    x.textContent = e.kind === "connect"
+      ? (e.proto || "").toUpperCase() + (e.port && e.port !== std ? " :" + e.port : "") : (e.text || "");
     x.title = x.textContent;
     li.append(t, w, k, x);
     return li;

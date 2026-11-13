@@ -101,6 +101,15 @@
     <div class="card"><svg id="daily" role="img" aria-label="Sessions per day, UTC"></svg></div>
   </section>
 
+  <section aria-labelledby="ports-h">
+    <h2 id="ports-h">By port</h2>
+    <div class="card">
+      <p class="meta">Cowrie answers SSH on 22 and 2222 and Telnet on 23 and 2323. Logged in: sessions with an
+        accepted login. Since: the first day a port saw a session.</p>
+      <div class="scroll-x"><table id="t-ports" class="cols"></table></div>
+    </div>
+  </section>
+
   <h2>What they try</h2>
   <div class="tables">
     <section class="card wide"><h3>MITRE ATT&amp;CK techniques</h3>

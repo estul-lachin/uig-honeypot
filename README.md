@@ -71,9 +71,13 @@ Attacker-supplied strings are only ever inserted with `textContent`, never as HT
 `vps/ttp_rules.json` maps Cowrie events and command text to MITRE ATT&CK techniques (regexes that
 Python and Splunk both understand). `aggregate.py` counts each technique once per session, and
 `weekly.py` writes one report per finished ISO week (UTC) two hours after it ends: totals with the change
-from the previous week, values never seen before, TTPs, the hours of day, and the top lists. Reports are written once
+from the previous week, values never seen before, TTPs, the hours of day, the ports, and the top lists. Reports are written once
 and outlive the 30-day raw-log retention. Notes for a week go in `site/notes/YYYY-Www.md`
 (see `site/notes/README.md`).
+
+Sessions are also counted per honeypot port (22, 2222, 23, 2323): sessions, unique sources, sessions with an
+accepted login and commands run, in `stats.json` and in each report. Cowrie logs its container port as
+`dst_port`; `HOST_PORT` in `aggregate.py` maps it back to the host port and must match `vps/compose.yaml`.
 
 ## IP reputation (AbuseIPDB)
 
