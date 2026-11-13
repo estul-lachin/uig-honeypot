@@ -189,6 +189,28 @@ its event time (Wazuh would stamp the replay time), cut to milliseconds, Wazuh's
 `site/og-image.png` (1200x630, shown by LinkedIn and others) is rendered from `assets/og-image.html` with the same
 headless-Chrome command as in [uig-home](https://github.com/estul-lachin/uig-home#readme).
 
+## Persona: a believable backup server
+
+Stock Cowrie has tells that scanners check before they bother: `/.dockerenv` in the root, a user `phil`, an
+`/etc/hostname` (`svr04`) and `/etc/hosts` (`nas3`) that disagree with the prompt, an empty `os-release`
+and `fstab`, empty `/opt` and `/srv`, and a `df` that fails with "Exec format error" (its canned output sits
+at `/bin/df`, but `/bin` is a link to `usr/bin`). `vps/persona/` turns the honeypot into one consistent
+machine instead: `db-backup-01`, a small company's PostgreSQL backup server.
+
+- `build_fs.py` starts from Cowrie's bundled `fs.pickle`, removes the tells, sets one hostname everywhere,
+  adds the users `ops` and `postgres`, and copies in `files/` (os-release, fstab, a cron job, the backup
+  script and README, shell histories). It adds a week of nightly dumps in `/srv/backup/postgres` (sizes
+  only, never readable) and their log, ending the night before the build.
+- `txtcmds/usr/bin/df` shows the 492G backup volume.
+- Cowrie's `free` reads the VPS's real `/proc/meminfo`, so the fake one is scaled to the VPS's RAM
+  (`MEM_KB`, 1682 MiB) and `df`'s tmpfs sizes follow it. Change both if the VPS is resized.
+
+`./hp deploy` builds the pickle on the VPS with the Cowrie image itself (no network, read-only, uid 999),
+so its format always matches the Cowrie version, and mounts it read-only. The dump dates are set at build
+time, so a redeploy (or a restart after one) moves "last night" forward. Everything in it is fiction: no real
+hosts, addresses or people. The per-port table on the page is the before/after measure: before the persona
+(2026-11-08 to 11-11), sessions ran 0.5 commands on average on SSH and 3.5 on Telnet.
+
 ## Safety
 
 - **No outbound connections from the honeypot.** `uig-egress.sh` drops every NEW connection that

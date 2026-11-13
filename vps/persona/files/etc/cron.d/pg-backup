@@ -1,0 +1,7 @@
+# Nightly PostgreSQL dumps to /srv/backup (see /opt/pgbackup/README)
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+
+30 2 * * *  postgres  /opt/pgbackup/pg-backup.sh >> /var/log/pg-backup.log 2>&1
+15 4 * * 0  root      find /srv/backup/postgres -name '*.sql.gz' -mtime +14 -delete

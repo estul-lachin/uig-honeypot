@@ -1,0 +1,8 @@
+pg-backup
+=========
+
+Dumps appdb from db-primary.internal every night at 02:30 (cron.d/pg-backup)
+into /srv/backup/postgres. Dumps older than 14 days are removed on Sundays.
+
+Restore:  zcat appdb_YYYY-MM-DD.sql.gz | psql -h <host> -U postgres appdb
+Log:      /var/log/pg-backup.log

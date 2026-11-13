@@ -1,0 +1,5 @@
+# /etc/fstab: static file system information.
+#
+# <file system>                           <mount point>  <type>  <options>          <dump>  <pass>
+UUID=3f6c2a1e-8d1b-4a57-9b0e-2c4d6e8f1a3b  /              ext4    errors=remount-ro  0       1
+UUID=9b2e7c4d-1f3a-4e6b-8c5d-7a9f0e1d2c3b  /srv/backup    ext4    defaults,noatime   0       2

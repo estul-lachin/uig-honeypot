@@ -118,6 +118,19 @@ install() {
     systemctl enable uig-egress.service
     systemctl restart uig-egress.service   # rule in place before the container starts
 
+    # The fake filesystem (vps/persona/build_fs.py), built by the Cowrie image itself so the
+    # pickle format always matches the Cowrie version. No network, read-only, uid 999.
+    say "Building the fake filesystem"
+    local image host
+    image=$(sed -n 's/^COWRIE_IMAGE=//p' .env | tail -n 1)
+    host=$(sed -n 's/^HP_FAKE_HOSTNAME=//p' .env | tail -n 1)
+    mkdir -p data/persona
+    chown 999:999 data/persona
+    docker run --rm --network none --user 999:999 --read-only \
+        --entrypoint /cowrie/cowrie-env/bin/python3 -e PYTHONPATH=/cowrie/cowrie-git/src \
+        -v "$APP/persona:/persona:ro" -v "$APP/data/persona:/out" \
+        "${image:-cowrie/cowrie:3.1.3}" /persona/build_fs.py --hostname "${host:-db-backup-01}" --out /out/fs.pickle
+
     local compose=(docker compose)
     docker compose version >/dev/null 2>&1 || compose=(docker-compose)
     say "Starting Cowrie"

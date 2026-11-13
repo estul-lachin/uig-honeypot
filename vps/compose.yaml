@@ -24,12 +24,17 @@ services:
       # Space-separated endpoints; see the port map at the top.
       COWRIE_SSH_LISTEN_ENDPOINTS: "tcp:2222:interface=0.0.0.0 tcp:2224:interface=0.0.0.0"
       COWRIE_TELNET_LISTEN_ENDPOINTS: "tcp:2223:interface=0.0.0.0 tcp:2323:interface=0.0.0.0"
+      # The db-backup persona (vps/persona): fake filesystem built at deploy time, plus df output.
+      COWRIE_SHELL_FILESYSTEM: /cowrie/persona-fs/fs.pickle
+      COWRIE_HONEYPOT_TXTCMDS_PATH: /cowrie/persona/txtcmds
       # Never relay attacker traffic to other hosts.
       COWRIE_SSH_FORWARDING: "false"
       COWRIE_SSH_FORWARD_REDIRECT: "false"
       COWRIE_SSH_FORWARD_TUNNEL: "false"
     volumes:
       - ./data/var:/cowrie/cowrie-git/var
+      - ./data/persona:/cowrie/persona-fs:ro
+      - ./persona/txtcmds:/cowrie/persona/txtcmds:ro
     read_only: true
     tmpfs:
       - /tmp
