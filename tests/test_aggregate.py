@@ -145,6 +145,19 @@ class AggregateTest(unittest.TestCase):
             self.assertEqual(json.load(fh), full)
         self.assertFalse(os.path.exists(self.out))  # no stats written
 
+    def test_recent_only_command_line(self):
+        # exactly the arguments uig-live.service passes
+        recent = os.path.join(self.tmp.name, "live.json")
+        aggregate.main(["--recent-only", "--logs", self.logs, "--recent-out", recent,
+                        "--redact", HONEYPOT_IP])
+        with open(recent) as fh:
+            self.assertIsInstance(json.load(fh)["events"], list)  # real clock: contents tested above
+        self.assertFalse(os.path.exists(self.state))
+
+    def test_full_run_needs_state(self):
+        with self.assertRaises(SystemExit):
+            aggregate.main(["--logs", self.logs, "--out", self.out])
+
     def test_recent_only_needs_recent_out(self):
         with self.assertRaises(SystemExit):
             aggregate.main(["--logs", self.logs, "--state", self.state, "--recent-only"])

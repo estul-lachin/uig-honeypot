@@ -346,7 +346,7 @@ def ttp_list(counter):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--logs", required=True, help="Cowrie log directory")
-    ap.add_argument("--state", required=True, help="directory for cached partials")
+    ap.add_argument("--state", help="directory for cached partials (required unless --recent-only)")
     ap.add_argument("--out", help="stats.json to write (required unless --recent-only)")
     ap.add_argument("--redact", action="append", default=[],
                     help="string to replace with [honeypot-ip] (repeatable)")
@@ -361,8 +361,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.recent_only and not a.recent_out:
         ap.error("--recent-only needs --recent-out")
-    if not a.recent_only and not a.out:
-        ap.error("--out is required")
+    if not a.recent_only and not (a.out and a.state):
+        ap.error("--out and --state are required")
     return run(a, Geo(a.geoip), datetime.datetime.now(datetime.timezone.utc))
 
 
