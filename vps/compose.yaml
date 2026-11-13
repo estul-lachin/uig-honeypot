@@ -1,7 +1,10 @@
 name: uig-honeypot
 
-# Cowrie SSH/Telnet honeypot. Host ports 22 and 23 go to the container;
-# the real sshd must already listen on another port (see harden.sh).
+# Cowrie SSH/Telnet honeypot. Host ports 22, 2222, 23 and 2323 go to the
+# container; the real sshd must already listen on another port (see harden.sh).
+# Each host port has its own container port, so Cowrie's dst_port tells them apart:
+#   host 22   -> 2222 (ssh)      host 23   -> 2223 (telnet)
+#   host 2222 -> 2224 (ssh)      host 2323 -> 2323 (telnet)
 services:
   cowrie:
     # Override with COWRIE_IMAGE in .env when Docker Hub is unreachable
@@ -10,12 +13,17 @@ services:
     restart: unless-stopped
     ports:
       - "22:2222"
+      - "2222:2224"
       - "23:2223"
+      - "2323:2323"
     environment:
       # Any cowrie.cfg key can be set as COWRIE_<SECTION>_<KEY>.
       COWRIE_HONEYPOT_HOSTNAME: ${HP_FAKE_HOSTNAME:-db-backup-01}
       COWRIE_HONEYPOT_DOWNLOAD_LIMIT_SIZE: "1048576"
       COWRIE_TELNET_ENABLED: "true"
+      # Space-separated endpoints; see the port map at the top.
+      COWRIE_SSH_LISTEN_ENDPOINTS: "tcp:2222:interface=0.0.0.0 tcp:2224:interface=0.0.0.0"
+      COWRIE_TELNET_LISTEN_ENDPOINTS: "tcp:2223:interface=0.0.0.0 tcp:2323:interface=0.0.0.0"
       # Never relay attacker traffic to other hosts.
       COWRIE_SSH_FORWARDING: "false"
       COWRIE_SSH_FORWARD_REDIRECT: "false"

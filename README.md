@@ -10,7 +10,7 @@ links get published.
 ```
 VPS (Debian 13)
 ├─ real sshd on a high port, key-only
-├─ Docker: Cowrie on 22/23, read-only, no capabilities, no outbound connections
+├─ Docker: Cowrie on 22/2222 (SSH) and 23/2323 (Telnet), read-only, no capabilities, no outbound connections
 ├─ Suricata on eth0: passive IDS, alerts only (vps/suricata/)
 ├─ every minute: aggregate.py --recent-only → recent.json (last hour of events), publish.sh
 ├─ every 10 minutes: sentinel.py → new Cowrie events and Suricata alerts to Microsoft Sentinel
@@ -40,7 +40,9 @@ Mac
    `/root/.ssh/authorized_keys` on the VPS (`ssh-copy-id root@<host>`).
 2. `./hp prepare` installs Docker and switches sshd to key-only. sshd then listens on **both** 22 and
    `HP_SSH_PORT`, so you can't get locked out.
-3. Open `HP_SSH_PORT`, 22 and 23 (TCP) in the provider's security group.
+3. Open `HP_SSH_PORT`, 22, 23, 2222 and 2323 (TCP) in the provider's security group.
+   Each honeypot port has its own container port, so Cowrie's `dst_port` tells them apart: 2222 is host
+   22, 2224 is host 2222, 2223 is host 23 and 2323 is host 2323 (see `vps/compose.yaml`).
 4. `./hp finalize` connects on the new port, which proves that port works, and then drops 22 from sshd.
 5. `./hp build-image` is only needed if the VPS can't pull from Docker Hub (common on mainland-China
    VPSes, where uploads from abroad can also crawl at a few KB/s). It builds `uig/cowrie:<version>` on

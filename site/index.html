@@ -125,7 +125,7 @@
 
   <section class="about">
     <h2>How it works</h2>
-    <p>Cowrie listens on ports 22 and 23 and pretends to be a Linux server. It runs in a locked-down container that
+    <p>Cowrie listens on SSH (ports 22 and 2222) and Telnet (23 and 2323) and pretends to be a Linux server. It runs in a locked-down container that
       cannot open outbound connections, so attackers can't use it against anyone else. Every minute a script publishes
       the last hour of events, and every hour the aggregated stats, as the JSON this page reads: IP addresses are reduced to country, city and coordinates
       rounded to about 10 km; URLs and IPs inside commands are defanged (<code>hxxp[:]//</code>). The raw logs stay

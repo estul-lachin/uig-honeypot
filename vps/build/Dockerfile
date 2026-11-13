@@ -37,7 +37,7 @@ USER 999:999
 WORKDIR /cowrie/cowrie-git
 RUN python3 bin/regen-dropin.cache
 VOLUME ["/cowrie/cowrie-git/var", "/cowrie/cowrie-git/etc"]
-EXPOSE 2222 2223
+EXPOSE 2222 2223 2224 2323
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/cowrie/cowrie-env/bin/python3"]
 CMD ["/cowrie/cowrie-env/bin/twistd", "-n", "--umask=0022", "--pidfile=", "--logger", "cowrie.python.logfile.stdoutLogger", "cowrie"]
