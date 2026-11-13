@@ -44,8 +44,8 @@
     <h1>Honeypot</h1>
     <p class="lead">A <a href="https://github.com/cowrie/cowrie">Cowrie</a> SSH and Telnet honeypot on a small VPS in
       South China. Every session below is real, unsolicited traffic from the internet: bots guessing passwords and
-      running their first commands on what they think is a server. The map follows new sessions live, a
-      few minutes behind; the stats update hourly. No IP addresses are published.</p>
+      running their first commands on what they think is a server. The map opens on a replay of the last
+      hour; switch to Live to follow new sessions a few minutes behind. The stats update hourly. No IP addresses are published.</p>
   </section>
 
   <div class="stats" id="stats" aria-live="polite">
@@ -60,15 +60,15 @@
   <section class="card map-card" aria-labelledby="map-h">
     <div class="card-head">
       <div>
-        <h2 id="map-h">Live attack map</h2>
+        <h2 id="map-h">Last hour, replayed</h2>
         <p class="meta" id="clock">Loading…</p>
       </div>
       <div class="controls">
         <span class="seg" role="radiogroup" aria-label="Map mode">
-          <button type="button" data-mode="live" role="radio" aria-checked="true">Live</button>
-          <button type="button" data-mode="replay" role="radio" aria-checked="false">Replay last hour</button>
+          <button type="button" data-mode="live" role="radio" aria-checked="false">Live</button>
+          <button type="button" data-mode="replay" role="radio" aria-checked="true">Replay last hour</button>
         </span>
-        <span class="controls" id="replay-controls" role="group" aria-label="Replay controls" hidden>
+        <span class="controls" id="replay-controls" role="group" aria-label="Replay controls">
           <button type="button" id="play" aria-pressed="true">Pause</button>
           <span class="seg" role="radiogroup" aria-label="Replay speed">
             <button type="button" data-speed="1" role="radio" aria-checked="false">1×</button>

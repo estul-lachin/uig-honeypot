@@ -475,10 +475,8 @@
     }
 
     adaptDelay();
-    if (age() > STALE) {
-      // The VPS has not published for a while: replaying the last hour we have is more useful.
-      setMode("replay");
-    } else setMode("live");
+    // Open on the replay: it always has something to show, while live can sit quiet for minutes.
+    setMode("replay");
     playBtn.textContent = playing ? "Pause" : "Play";
     playBtn.setAttribute("aria-pressed", String(playing));
     requestAnimationFrame(tick);
