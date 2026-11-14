@@ -1,0 +1,27 @@
+/* Incident report pages (inc-*.html). Loaded after style.css; reuses its tokens. */
+
+.report h2 { margin-top: 48px; }
+.report p, .report li { line-height: 1.6; max-width: 760px; }
+.report ul, .report ol { padding-left: 22px; }
+.report li + li { margin-top: 4px; }
+
+.status { display: inline-block; margin: 12px 0 0; padding: 4px 10px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius); background: var(--surface); font-size: 13px; color: var(--warn); font-weight: 600; }
+
+.table-scroll { overflow-x: auto; margin: 12px 0 8px; }
+table.rt { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 14px; }
+table.rt th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted); padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--border-strong); white-space: nowrap; }
+table.rt td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.rt tr:last-child td { border-bottom: 0; }
+table.rt td.t { white-space: nowrap; font-family: var(--mono); font-size: 13px; }
+table.rt code { overflow-wrap: normal; word-break: normal; }
+table.rt code.h { word-break: break-all; }
+
+.report figure { margin: 24px 0; }
+.report figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); }
+.report figcaption { color: var(--dim); font-size: 13px; margin-top: 8px; max-width: 760px; }
+
+.keyline { border-left: 3px solid var(--accent); padding: 8px 14px; background: var(--surface); margin: 16px 0;
+  max-width: 760px; }
